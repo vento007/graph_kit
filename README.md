@@ -51,6 +51,22 @@ A tiny, in-memory, typed directed multigraph with:
 See runnable examples in `example/bin/` and the sample graph in `example/lib/data.dart`.
 
 
+## Table of Contents
+
+- [Quick Preview](#quick-preview)
+- [Pattern Query Examples](#pattern-query-examples)
+- [Mini-Cypher Reference](#mini-cypher-reference)
+- [Comparison with Cypher](#comparison-with-cypher)
+- [Core concepts](#core-concepts)
+- [Pattern syntax (mini, Cypher-inspired)](#pattern-syntax-mini-cypher-inspired)
+- [Quick start](#quick-start)
+- [Row-wise pattern results (new)](#row-wise-pattern-results-new)
+- [Generic traversal utilities (new)](#generic-traversal-utilities-new)
+- [JSON Serialization](#json-serialization)
+- [Examples index](#examples-index)
+- [License](#license)
+
+
 ## Quick Preview
 
 <p align="center">
