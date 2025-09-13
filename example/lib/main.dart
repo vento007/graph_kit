@@ -105,15 +105,17 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
       // Build highlighted nodes from grouped results
       final hi = <String>{};
-      for (final s in results.values) hi.addAll(s);
+      for (final s in results.values) {
+        hi.addAll(s);
+      }
       _highlightNodeIds = hi;
       setState(() {
         queryRows = null;
         queryResults = results;
       });
     } catch (e) {
-      print('Query error: $e'); // Debug print
-      setState(() => queryResults = {'error': {'Query failed: ${e.toString()}'}});
+      debugPrint('Query error: $e');
+      setState(() => queryResults = {'error': {'Query failed: $e'}});
     }
   }
 
@@ -261,7 +263,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                                 : row.entries.map((e) => '${e.key}=${e.value}').join('  ');
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 4),
-                              child: Text('• ' + text),
+                              child: Text('• $text'),
                             );
                           }).toList(),
                         ),
@@ -458,7 +460,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       final results = startId != null
           ? query.match(pattern, startId: startId)
           : query.match(pattern);
-      print('Query: $pattern, StartId: $startId, Results: $results'); // Debug
+      debugPrint('Query: $pattern, StartId: $startId, Results: $results');
       _lastPattern = pattern;
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
       setState(() {
@@ -466,8 +468,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
         queryResults = results;
       });
     } catch (e) {
-      print('Query error: $e'); // Debug print
-      setState(() => queryResults = {'error': {'Query failed: ${e.toString()}'}});
+       setState(() => queryResults = {'error': {'Query failed: ${e.toString()}'}});
     }
   }
 
@@ -481,7 +482,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       final rows = startId != null
           ? query.matchRows(pattern, startId: startId)
           : query.matchRows(pattern);
-      print('Rows Query: $pattern, StartId: $startId, Rows: ${rows.length}');
+      debugPrint('Rows Query: $pattern, StartId: $startId, Rows: ${rows.length}');
       _lastPattern = pattern;
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
       // Build highlighted nodes from row results
@@ -497,9 +498,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
         queryRows = rows;
       });
     } catch (e) {
-      print('Rows query error: $e');
+      debugPrint('Rows query error: $e');
       setState(() => queryRows = [
-        {'error': 'Query failed: ${e.toString()}'}
+        {'error': 'Query failed: $e'}
       ]);
     }
   }
@@ -520,7 +521,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       final props = (n.properties != null && n.properties!.isNotEmpty)
           ? ", properties: ${_formatMap(n.properties!)}"
           : '';
-      buf.writeln("graph.addNode(Node(id: '${_escapeSingleQuotes(n.id)}', type: '${_escapeSingleQuotes(n.type)}', label: '${_escapeSingleQuotes(n.label)}'${props}));");
+      buf.writeln("graph.addNode(Node(id: '${_escapeSingleQuotes(n.id)}', type: '${_escapeSingleQuotes(n.type)}', label: '${_escapeSingleQuotes(n.label)}'$props));");
     }
 
     buf.writeln('');
@@ -542,7 +543,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
 
   String _formatMap(Map<String, dynamic> map) {
     final entries = map.entries.map((e) => "'${_escapeSingleQuotes(e.key)}': ${_formatValue(e.value)}").join(', ');
-    return '{' + entries + '}';
+    return '{$entries}';
   }
 
   String _formatValue(dynamic v) {
@@ -550,7 +551,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     if (v is num || v is bool) return v.toString();
     if (v is List) {
       final items = v.map(_formatValue).join(', ');
-      return '[' + items + ']';
+      return '[$items]';
     }
     if (v is Map) {
       final converted = <String, dynamic>{
@@ -703,8 +704,8 @@ class GraphPainter extends CustomPainter {
         _ => Colors.grey,
       };
 
-      if (isHighlighted) nodeColor = nodeColor.withOpacity(0.8);
-      if (isSelected) nodeColor = nodeColor.withOpacity(1.0);
+      if (isHighlighted) nodeColor = nodeColor.withValues(alpha: 0.8);
+      if (isSelected) nodeColor = nodeColor.withValues(alpha: 1.0);
 
       // Draw node circle
       final paint = Paint()
