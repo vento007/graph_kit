@@ -1,3 +1,8 @@
+## 0.5.1
+
+• Docs: README images switched to raw.githubusercontent URLs so they render on GitHub and pub.dev
+• Example: lint tidy-ups and minor UI polish (debugPrint, interpolation, withValues)
+
 ## 0.5.0
 
 * Initial release of graph_kit (formerly graph_traverse)
