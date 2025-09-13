@@ -2,6 +2,10 @@
 
 <div align="center">
 
+<p>
+  <img src="media/graph_kit_logo.png" alt="Graph Kit Logo" width="140" />
+</p>
+
 <h1 align="center">graph kit — lightweight typed directed multigraph + pattern queries</h1>
 
 <p align="center"><em>A tiny, in-memory, typed directed multigraph with Cypher-inspired pattern queries</em></p>
