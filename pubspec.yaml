@@ -18,9 +18,6 @@ dev_dependencies:
 topics:
   - graph
   - traversal
-  - query
   - patterns
-  - relationships
   - cypher
   - algorithms
-  - data-structures
