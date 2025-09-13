@@ -3,7 +3,7 @@
 <div align="center">
 
 <p>
-  <img src="media/graph_kit_logo.png" alt="Graph Kit Logo" width="140" />
+  <img src="media/graph_kit_logo.png" alt="Graph Kit Logo" width="420" />
 </p>
 
 <h1 align="center">graph kit — lightweight typed directed multigraph + pattern queries</h1>
