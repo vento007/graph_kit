@@ -1,0 +1,41 @@
+/// A lightweight, in-memory graph library with pattern-based queries and efficient traversal.
+///
+/// This library provides a simple yet powerful graph data structure with:
+/// - Generic typed nodes and edges
+/// - Cypher-inspired pattern query language
+/// - Bidirectional adjacency for fast traversal
+/// - Subgraph expansion algorithms
+/// - Type-safe operation extensions
+///
+/// ## Quick Start
+///
+/// ```dart
+/// import 'package:graph_kit/graph_kit.dart';
+///
+/// // Create a graph
+/// final graph = Graph<Node>();
+/// final query = PatternQuery(graph);
+///
+/// // Add nodes and edges
+/// graph.addNode(Node(id: 'alice', type: 'User', label: 'Alice'));
+/// graph.addNode(Node(id: 'admins', type: 'Group', label: 'Administrators'));
+/// graph.addEdge('alice', 'MEMBER_OF', 'admins');
+///
+/// // Query with patterns
+/// final results = query.match('user-[:MEMBER_OF]->group', startId: 'alice');
+/// print(results['group']); // {'admins'}
+/// ```
+
+library;
+
+// Core graph components
+export 'src/node.dart';
+export 'src/graph.dart';
+export 'src/pattern_query.dart';
+export 'src/traversal.dart';
+export 'src/serialization.dart';
+
+// Type safety helpers
+export 'src/edge_type.dart';
+export 'src/node_type.dart';
+export 'src/extensions_typed.dart';
