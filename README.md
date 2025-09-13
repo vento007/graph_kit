@@ -3,7 +3,7 @@
 <div align="center">
 
 <p>
-  <img src="media/graph_kit_logo.png" alt="Graph Kit Logo" width="420" />
+  <img src="https://raw.githubusercontent.com/vento007/graph_kit/main/media/graph_kit_logo.png" alt="Graph Kit Logo" width="420" />
 </p>
 
 <h1 align="center">graph kit — lightweight typed directed multigraph + pattern queries</h1>
@@ -70,7 +70,7 @@ See runnable examples in `example/bin/` and the sample graph in `example/lib/dat
 ## Quick Preview
 
 <p align="center">
-  <img src="media/screenshoot.png" alt="Graph Kit demo preview" width="840" />
+  <img src="https://raw.githubusercontent.com/vento007/graph_kit/main/media/screenshoot.png" alt="Graph Kit demo preview" width="840" />
   <br/>
   <em>Mini-Cypher query highlighting nodes and edges in the Flutter demo.</em>
   
