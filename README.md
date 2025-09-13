@@ -10,8 +10,8 @@
   <a href="https://pub.dev/packages/graph_kit">
     <img src="https://img.shields.io/pub/v/graph_kit.svg" alt="Pub">
   </a>
-  <a href="https://github.com/your-username/graph_kit">
-    <img src="https://img.shields.io/github/stars/your-username/graph_kit.svg?style=flat&logo=github&colorB=deeppink&label=stars" alt="Star on Github">
+  <a href="https://github.com/vento007/graph_kit">
+    <img src="https://img.shields.io/github/stars/vento007/graph_kit.svg?style=flat&logo=github&colorB=deeppink&label=stars" alt="Star on Github">
   </a>
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/license-MIT-purple.svg" alt="License: MIT">
@@ -20,16 +20,16 @@
     <img src="https://img.shields.io/badge/dart-3.8.1%2B-blue.svg" alt="Dart Version">
   </a>
   <img src="https://img.shields.io/badge/platform-flutter%20|%20dart%20|%20web%20|%20native-blue.svg" alt="Platform Support">
-  <a href="https://github.com/your-username/graph_kit/issues">
-    <img src="https://img.shields.io/github/issues/your-username/graph_kit.svg" alt="Open Issues">
+  <a href="https://github.com/vento007/graph_kit/issues">
+    <img src="https://img.shields.io/github/issues/vento007/graph_kit.svg" alt="Open Issues">
   </a>
-  <a href="https://github.com/your-username/graph_kit/pulls">
-    <img src="https://img.shields.io/github/issues-pr/your-username/graph_kit.svg" alt="Pull Requests">
+  <a href="https://github.com/vento007/graph_kit/pulls">
+    <img src="https://img.shields.io/github/issues-pr/vento007/graph_kit.svg" alt="Pull Requests">
   </a>
-  <a href="https://github.com/your-username/graph_kit/graphs/contributors">
-    <img src="https://img.shields.io/github/contributors/your-username/graph_kit.svg" alt="Contributors">
+  <a href="https://github.com/vento007/graph_kit/graphs/contributors">
+    <img src="https://img.shields.io/github/contributors/vento007/graph_kit.svg" alt="Contributors">
   </a>
-  <img src="https://img.shields.io/github/last-commit/your-username/graph_kit.svg" alt="Last Commit">
+  <img src="https://img.shields.io/github/last-commit/vento007/graph_kit.svg" alt="Last Commit">
 
 </p>
 
