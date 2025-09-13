@@ -51,6 +51,16 @@ A tiny, in-memory, typed directed multigraph with:
 See runnable examples in `example/bin/` and the sample graph in `example/lib/data.dart`.
 
 
+## Quick Preview
+
+<p align="center">
+  <img src="media/screenshoot.png" alt="Graph Kit demo preview" width="840" />
+  <br/>
+  <em>Mini-Cypher query highlighting nodes and edges in the Flutter demo.</em>
+  
+</p>
+
+
 ## Pattern Query Examples
 
 - **Simple patterns**: `"user:User"` → `{alice, bob, charlie}`
