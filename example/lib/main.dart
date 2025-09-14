@@ -95,7 +95,11 @@ class _GraphVisualizationState extends State<GraphVisualization> {
   void _executeQuery() {
     final pattern = _queryController.text;
     if (pattern.isEmpty) {
-      setState(() => queryResults = null);
+      setState(() {
+        queryResults = null;
+        _highlightEdgeTypes = const {};
+        _highlightNodeIds = const {};
+      });
       return;
     }
 
@@ -115,7 +119,11 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       });
     } catch (e) {
       debugPrint('Query error: $e');
-      setState(() => queryResults = {'error': {'Query failed: $e'}});
+      setState(() {
+        queryResults = {'error': {'Query failed: $e'}};
+        _highlightEdgeTypes = const {};
+        _highlightNodeIds = const {};
+      });
     }
   }
 
@@ -138,40 +146,6 @@ class _GraphVisualizationState extends State<GraphVisualization> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Pattern Query:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _queryController,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g., person:Person-[:WORKS_FOR]->team',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _executeQuery(),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _executeQuery,
-                        child: const Text('Execute'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () => setState(() {
-                        _queryController.clear();
-                        queryResults = null;
-                        queryRows = null;
-                        _lastPattern = null;
-                        _highlightEdgeTypes = const {};
-                        _highlightNodeIds = const {};
-                      }),
-                      child: const Text('Clear'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
 
                 // Preset queries
                 const Text('Quick Queries:', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -188,20 +162,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                     _buildQueryChip('Team Assignments', 'team:Team-[:ASSIGNED_TO]->project'),
                     _buildQueryChip('Management Chain', 'person:Person-[:MANAGES]->team'),
                     _buildQueryChip('Engineering Members', 'team:Team{label=Engineering}<-[:WORKS_FOR]-person'),
+                    _buildQueryChip('Senior Developers', 'person:Person{level=Senior}'),
+                    _buildQueryChip('Active Projects', 'project:Project{status=active}'),
                     _buildRowsQueryChip('Alice\'s Access Path', 'person:Person{label~Alice}-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project'),
-                  ],
-                ),
-
-                const SizedBox(height: 8),
-                const Text('Cypher-Style (with MATCH):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    _buildQueryChip('MATCH All People', 'MATCH person:Person'),
-                    _buildQueryChip('MATCH Work Relations', 'MATCH person:Person-[:WORKS_FOR]->team'),
-                    _buildQueryChip('MATCH Multi-hop', 'MATCH person:Person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project'),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -221,7 +184,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                       child: SingleChildScrollView(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: queryResults!.entries.map((entry) {
+                          children: _getSortedResultEntries(queryResults!).map((entry) {
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Column(
@@ -297,6 +260,48 @@ class _GraphVisualizationState extends State<GraphVisualization> {
           Expanded(
             child: Column(
               children: [
+                // Query input field - moved from left panel
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _queryController,
+                          maxLines: 2,
+                          minLines: 1,
+                          style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                          decoration: const InputDecoration(
+                            hintText: 'e.g., person:Person-[:WORKS_FOR]->team',
+                            hintStyle: TextStyle(fontSize: 11),
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            isDense: true,
+                          ),
+                          onSubmitted: (_) => _executeQuery(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _executeQuery,
+                        child: const Text('Execute'),
+                      ),
+                      const SizedBox(width: 4),
+                      ElevatedButton(
+                        onPressed: () => setState(() {
+                          _queryController.clear();
+                          queryResults = null;
+                          queryRows = null;
+                          _lastPattern = null;
+                          _highlightEdgeTypes = const {};
+                          _highlightNodeIds = const {};
+                        }),
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ),
+                ),
+
                 Expanded(
                   child: InteractiveViewer(
                     boundaryMargin: const EdgeInsets.all(20),
@@ -315,42 +320,6 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                     ),
                   ),
                 ),
-
-                // Current query display
-                if (_lastPattern != null) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      children: [
-                        const Text('Query: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                        Expanded(
-                          child: Text(
-                            _lastPattern!,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 14,
-                              color: Colors.blue,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Copy query to clipboard',
-                          icon: const Icon(Icons.copy, size: 16),
-                          onPressed: () async {
-                            await Clipboard.setData(ClipboardData(text: _lastPattern!));
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
 
                 const SizedBox(height: 8),
                 // Toggle + copy actions
@@ -452,7 +421,11 @@ class _GraphVisualizationState extends State<GraphVisualization> {
 
   void _executeQueryWithStartId(String pattern, String? startId) {
     if (pattern.isEmpty) {
-      setState(() => queryResults = null);
+      setState(() {
+        queryResults = null;
+        _highlightEdgeTypes = const {};
+        _highlightNodeIds = const {};
+      });
       return;
     }
 
@@ -463,18 +436,32 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       debugPrint('Query: $pattern, StartId: $startId, Results: $results');
       _lastPattern = pattern;
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
+      // Build highlighted nodes from grouped results
+      final hi = <String>{};
+      for (final s in results.values) {
+        hi.addAll(s);
+      }
+      _highlightNodeIds = hi;
       setState(() {
         queryRows = null;
         queryResults = results;
       });
     } catch (e) {
-       setState(() => queryResults = {'error': {'Query failed: ${e.toString()}'}});
+       setState(() {
+         queryResults = {'error': {'Query failed: ${e.toString()}'}};
+         _highlightEdgeTypes = const {};
+         _highlightNodeIds = const {};
+       });
     }
   }
 
   void _executeRowsQueryWithStartId(String pattern, String? startId) {
     if (pattern.isEmpty) {
-      setState(() => queryRows = null);
+      setState(() {
+        queryRows = null;
+        _highlightEdgeTypes = const {};
+        _highlightNodeIds = const {};
+      });
       return;
     }
 
@@ -499,9 +486,11 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       });
     } catch (e) {
       debugPrint('Rows query error: $e');
-      setState(() => queryRows = [
-        {'error': 'Query failed: $e'}
-      ]);
+      setState(() {
+        queryRows = [{'error': 'Query failed: $e'}];
+        _highlightEdgeTypes = const {};
+        _highlightNodeIds = const {};
+      });
     }
   }
 
@@ -573,6 +562,31 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     }
     return types;
   }
+
+  List<MapEntry<String, Set<String>>> _getSortedResultEntries(Map<String, Set<String>> results) {
+    // Define the desired order based on visual layout: Person -> Team -> Project
+    final typeOrder = ['person', 'team', 'project'];
+
+    final sortedEntries = results.entries.toList();
+    sortedEntries.sort((a, b) {
+      final aIndex = typeOrder.indexWhere((type) => a.key.toLowerCase().contains(type));
+      final bIndex = typeOrder.indexWhere((type) => b.key.toLowerCase().contains(type));
+
+      // If both found in typeOrder, sort by their index
+      if (aIndex != -1 && bIndex != -1) {
+        return aIndex.compareTo(bIndex);
+      }
+
+      // If only one found, put found one first
+      if (aIndex != -1) return -1;
+      if (bIndex != -1) return 1;
+
+      // If neither found, sort alphabetically
+      return a.key.compareTo(b.key);
+    });
+
+    return sortedEntries;
+  }
 }
 
 class GraphPainter extends CustomPainter {
@@ -608,26 +622,50 @@ class GraphPainter extends CustomPainter {
     teams.sort();
     projects.sort();
 
-    // Layout parameters
-    const double columnWidth = 250.0;
-    const double rowHeight = 120.0;
-    const double startX = 150.0;
-    const double startY = 100.0;
+    // Improved layout parameters for better spacing
+    const double startX = 120.0;
+    const double startY = 80.0;
 
-    // Position people in first column
+    // Use a fan-out layout to minimize edge crossings
+    // People on the left in a vertical column
     for (int i = 0; i < people.length; i++) {
-      positions[people[i]] = Offset(startX, startY + i * rowHeight);
+      positions[people[i]] = Offset(startX, startY + i * 140.0);
     }
 
-    // Position teams in second column
+    // Teams in the middle, spread out vertically to align with connections
     for (int i = 0; i < teams.length; i++) {
-      positions[teams[i]] = Offset(startX + columnWidth, startY + i * rowHeight);
+      // Spread teams more to reduce crossing - space them further apart
+      positions[teams[i]] = Offset(startX + 320.0, startY + i * 160.0);
     }
 
-    // Position projects in third column
-    for (int i = 0; i < projects.length; i++) {
-      positions[projects[i]] = Offset(startX + 2 * columnWidth, startY + i * rowHeight);
+    // Projects on the right, positioned to align with their team connections
+    if (projects.isNotEmpty) {
+      // Sort projects to match expected connections: web_app, mobile_app, campaign
+      final sortedProjects = [...projects];
+      sortedProjects.sort((a, b) {
+        // Custom sort to put web_app first, mobile_app second, campaign last
+        final order = {'web_app': 0, 'mobile_app': 1, 'campaign': 2};
+        return (order[a] ?? 99).compareTo(order[b] ?? 99);
+      });
+
+      for (int i = 0; i < sortedProjects.length; i++) {
+        // Position projects to minimize crossings
+        if (sortedProjects[i] == 'web_app') {
+          // Align with engineering team
+          positions[sortedProjects[i]] = Offset(startX + 640.0, startY + 80.0);
+        } else if (sortedProjects[i] == 'mobile_app') {
+          // Position between engineering and design
+          positions[sortedProjects[i]] = Offset(startX + 640.0, startY + 200.0);
+        } else if (sortedProjects[i] == 'campaign') {
+          // Align with marketing team
+          positions[sortedProjects[i]] = Offset(startX + 640.0, startY + 320.0);
+        } else {
+          // Fallback for other projects
+          positions[sortedProjects[i]] = Offset(startX + 640.0, startY + i * 140.0);
+        }
+      }
     }
+
 
     return positions;
   }
@@ -668,19 +706,11 @@ class GraphPainter extends CustomPainter {
           paint.color = isHighlighted ? Colors.red.shade700 : Colors.grey.shade600;
           paint.strokeWidth = isHighlighted ? 4 : 2;
 
-          // Draw arrow
-          _drawArrow(canvas, srcPos, dstPos, paint);
 
-          // Draw edge label with better positioning
-          final direction = (dstPos - srcPos).normalized();
-          final midPoint = Offset(
-            (srcPos.dx + dstPos.dx) / 2,
-            (srcPos.dy + dstPos.dy) / 2,
-          );
-          // Simple perpendicular offset for edge labels
-          final labelOffset = Offset(-direction.dy * 20, direction.dx * 20);
-          final labelPos = midPoint + labelOffset;
+          // Draw arrow with smart routing
+          final labelPos = _drawSmartArrow(canvas, srcPos, dstPos, paint);
 
+          // Draw edge label at the calculated position
           _drawTextWithBackground(canvas, edgeType, labelPos,
               isHighlighted ? Colors.red.shade800 : Colors.grey.shade700);
         }
@@ -707,59 +737,233 @@ class GraphPainter extends CustomPainter {
       if (isHighlighted) nodeColor = nodeColor.withValues(alpha: 0.8);
       if (isSelected) nodeColor = nodeColor.withValues(alpha: 1.0);
 
-      // Draw node circle
+      // Draw node shape by type: Team = square, Project = diamond, others = circle
       final paint = Paint()
         ..color = nodeColor
         ..style = PaintingStyle.fill;
 
       final radius = isSelected ? 35.0 : 30.0;
-      canvas.drawCircle(pos, radius, paint);
-
-      // Draw border if selected or highlighted
-      if (isSelected || isHighlighted) {
-        final borderPaint = Paint()
-          ..color = isSelected ? Colors.black : Colors.red.shade700
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = isSelected ? 4 : 3;
-        canvas.drawCircle(pos, radius, borderPaint);
+      final typeLc = node.type.toLowerCase();
+      String glyph = 'P';
+      if (typeLc == 'team') {
+        // Square (sharp corners)
+        final size = radius * 2;
+        final rect = Rect.fromCenter(center: pos, width: size, height: size);
+        canvas.drawRect(rect, paint);
+        if (isSelected || isHighlighted) {
+          final borderPaint = Paint()
+            ..color = isSelected ? Colors.black : Colors.red.shade700
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = isSelected ? 4 : 3;
+          canvas.drawRect(rect, borderPaint);
+        }
+        glyph = 'T';
+      } else if (typeLc == 'project') {
+        // Diamond (rotated square)
+        final size = radius * 2;
+        final half = size / 2;
+        final path = Path()
+          ..moveTo(pos.dx, pos.dy - half)
+          ..lineTo(pos.dx + half, pos.dy)
+          ..lineTo(pos.dx, pos.dy + half)
+          ..lineTo(pos.dx - half, pos.dy)
+          ..close();
+        canvas.drawPath(path, paint);
+        if (isSelected || isHighlighted) {
+          final borderPaint = Paint()
+            ..color = isSelected ? Colors.black : Colors.red.shade700
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = isSelected ? 4 : 3;
+          canvas.drawPath(path, borderPaint);
+        }
+        glyph = 'PR';
+      } else {
+        // Circle (e.g., Person)
+        canvas.drawCircle(pos, radius, paint);
+        if (isSelected || isHighlighted) {
+          final borderPaint = Paint()
+            ..color = isSelected ? Colors.black : Colors.red.shade700
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = isSelected ? 4 : 3;
+          canvas.drawCircle(pos, radius, borderPaint);
+        }
+        glyph = 'P';
       }
+
+      // Center glyph for quick visual verification of shape/type
+      _drawText(canvas, glyph, pos, Colors.white);
 
       // Draw node label
       _drawText(canvas, node.label, pos + const Offset(0, 50), Colors.black);
     }
   }
 
-  void _drawArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
+  Offset _drawSmartArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
     // Calculate direction and shorten line to node edge
     final direction = (end - start).normalized();
     final adjustedStart = start + direction * 30;
     final adjustedEnd = end - direction * 30;
 
-    // Draw line
-    canvas.drawLine(adjustedStart, adjustedEnd, paint);
+    // Check if this connection would overlap any nodes (regardless of being diagonal)
+    if (_wouldOverlapNode(adjustedStart, adjustedEnd)) {
+      // Use curved path to avoid node overlaps
+      return _drawCurvedArrow(canvas, adjustedStart, adjustedEnd, paint);
+    } else {
+      // Use straight line
+      return _drawStraightArrow(canvas, adjustedStart, adjustedEnd, paint);
+    }
+  }
+
+  bool _wouldOverlapNode(Offset start, Offset end) {
+    // For cross-column connections (like person->project), always use curves
+    final deltaX = (end.dx - start.dx).abs();
+    if (deltaX > 300) {
+      // This is a cross-column connection, always curve it
+      return true;
+    }
+
+    // Check if the straight line path would pass too close to any node
+    const nodeRadius = 60.0;
+
+    for (final pos in nodePositions.values) {
+      // Skip if this is the start or end node
+      if ((pos - start).distance < 70 || (pos - end).distance < 70) continue;
+
+      // Calculate distance from line to node center
+      final distance = _distancePointToLine(pos, start, end);
+      if (distance < nodeRadius) {
+        // Check if the node is actually between start and end
+        final projectionT = _projectionParameter(pos, start, end);
+        if (projectionT > 0.1 && projectionT < 0.9) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  double _distancePointToLine(Offset point, Offset lineStart, Offset lineEnd) {
+    final lineLength = (lineEnd - lineStart).distance;
+    if (lineLength == 0) return (point - lineStart).distance;
+
+    final t = ((point.dx - lineStart.dx) * (lineEnd.dx - lineStart.dx) +
+               (point.dy - lineStart.dy) * (lineEnd.dy - lineStart.dy)) / (lineLength * lineLength);
+
+    final projection = lineStart + (lineEnd - lineStart) * t.clamp(0.0, 1.0);
+    return (point - projection).distance;
+  }
+
+  double _projectionParameter(Offset point, Offset lineStart, Offset lineEnd) {
+    final lineLength = (lineEnd - lineStart).distance;
+    if (lineLength == 0) return 0.0;
+
+    return ((point.dx - lineStart.dx) * (lineEnd.dx - lineStart.dx) +
+            (point.dy - lineStart.dy) * (lineEnd.dy - lineStart.dy)) / (lineLength * lineLength);
+  }
+
+  Offset _drawCurvedArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
+    // Create a bezier curve that arcs around potential node overlaps
+    final midX = (start.dx + end.dx) / 2;
+    final midY = (start.dy + end.dy) / 2;
+
+    // Determine curve direction based on positions
+    final deltaX = end.dx - start.dx;
+    final deltaY = end.dy - start.dy;
+
+    // Simplified curve logic: use high arcs for cross-column connections
+    double curveOffset;
+    bool useSidewardCurve = false;
+
+    // For cross-column connections (like alice->web_app), always use high arc
+    if (deltaX.abs() > 300) {
+      // High upward arc to go well above all nodes
+      curveOffset = -120.0;
+    } else if (deltaY.abs() < 30) {
+      // Horizontal connection: arc upward to avoid middle nodes
+      curveOffset = -60.0;
+    } else if (deltaX.abs() < 100) {
+      // Vertical connection: arc sideways
+      curveOffset = -80.0;
+      useSidewardCurve = true;
+    } else {
+      // Other diagonal connections
+      curveOffset = deltaY > 0 ? -60.0 : 60.0;
+    }
+
+    final Offset controlPoint1, controlPoint2;
+
+    if (useSidewardCurve) {
+      // For vertical connections, curve sideways instead of up/down
+      controlPoint1 = Offset(midX + curveOffset, start.dy + deltaY * 0.3);
+      controlPoint2 = Offset(midX + curveOffset, end.dy - deltaY * 0.3);
+    } else {
+      // For horizontal/diagonal connections, curve up/down
+      controlPoint1 = Offset(start.dx + deltaX * 0.3, midY + curveOffset);
+      controlPoint2 = Offset(end.dx - deltaX * 0.3, midY + curveOffset);
+    }
+
+    final path = Path()
+      ..moveTo(start.dx, start.dy)
+      ..cubicTo(controlPoint1.dx, controlPoint1.dy,
+                controlPoint2.dx, controlPoint2.dy,
+                end.dx, end.dy);
+
+    canvas.drawPath(path, paint);
+
+    // Draw arrowhead at the end
+    final endDirection = (controlPoint2 - end).normalized();
+    _drawArrowhead(canvas, end, endDirection, paint);
+
+    // Return label position at the curve peak
+    final Offset labelPos;
+    if (useSidewardCurve) {
+      // For sideways curves, place label to the side of the curve
+      labelPos = Offset(midX + curveOffset - 15, midY);
+    } else {
+      // For up/down curves, place label above/below the curve
+      labelPos = Offset(midX, midY + curveOffset + 15);
+    }
+    return labelPos;
+  }
+
+  Offset _drawStraightArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
+    // Draw straight line
+    canvas.drawLine(start, end, paint);
 
     // Draw arrowhead
+    final direction = (end - start).normalized();
+    _drawArrowhead(canvas, end, direction, paint);
+
+    // Return label position with perpendicular offset from midpoint
+    final midPoint = Offset((start.dx + end.dx) / 2, (start.dy + end.dy) / 2);
+    final labelOffset = Offset(-direction.dy * 20, direction.dx * 20);
+    return midPoint + labelOffset;
+  }
+
+  void _drawArrowhead(Canvas canvas, Offset position, Offset direction, Paint paint) {
     final arrowLength = 15.0;
     final arrowAngle = math.pi / 6;
 
-    final arrowPoint1 = adjustedEnd + Offset(
+    final arrowPoint1 = position + Offset(
       -arrowLength * math.cos(-arrowAngle + direction.angle),
       -arrowLength * math.sin(-arrowAngle + direction.angle),
     );
 
-    final arrowPoint2 = adjustedEnd + Offset(
+    final arrowPoint2 = position + Offset(
       -arrowLength * math.cos(arrowAngle + direction.angle),
       -arrowLength * math.sin(arrowAngle + direction.angle),
     );
 
     final arrowPath = Path()
-      ..moveTo(adjustedEnd.dx, adjustedEnd.dy)
+      ..moveTo(position.dx, position.dy)
       ..lineTo(arrowPoint1.dx, arrowPoint1.dy)
       ..lineTo(arrowPoint2.dx, arrowPoint2.dy)
       ..close();
 
-    canvas.drawPath(arrowPath, paint..style = PaintingStyle.fill);
-    paint.style = PaintingStyle.stroke;
+    final oldStyle = paint.style;
+    paint.style = PaintingStyle.fill;
+    canvas.drawPath(arrowPath, paint);
+    paint.style = oldStyle;
   }
 
   void _drawText(Canvas canvas, String text, Offset position, Color color) {

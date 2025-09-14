@@ -1,3 +1,7 @@
+## 0.5.2
+
+• Example: improved graph demo with better edge routing, layout, and UX
+
 ## 0.5.1
 
 • Docs: README images switched to raw.githubusercontent URLs so they render on GitHub and pub.dev
