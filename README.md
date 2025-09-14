@@ -70,7 +70,7 @@ See runnable examples in `example/bin/` and the sample graph in `example/lib/dat
 ## Quick Preview
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/vento007/graph_kit/main/media/screenshoot.png" alt="Graph Kit demo preview" width="840" />
+  <img src="https://raw.githubusercontent.com/vento007/graph_kit/main/media/screenshoot2.png" alt="Graph Kit demo preview" width="840" />
   <br/>
   <em>Mini-Cypher query highlighting nodes and edges in the Flutter demo.</em>
   
