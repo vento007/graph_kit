@@ -1,3 +1,7 @@
+## 0.6.1
+
+• Fix: match() method now returns only connected nodes instead of all nodes of matching type
+
 ## 0.6.0
 
 • Added PathMatch and PathEdge classes for complete path results with Neo4j-style edge information
