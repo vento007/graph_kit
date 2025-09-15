@@ -162,135 +162,16 @@ class PatternQuery<N extends Node> {
   /// print(results['group']); // {'g1', 'g2', 'g3'}
   /// ```
   Map<String, Set<String>> match(String pattern, {String? startId}) {
+    // Use matchPaths to get correct connected paths only
+    final paths = matchPaths(pattern, startId: startId);
+
+    // Extract nodes from actual paths
     final results = <String, Set<String>>{};
-
-    // Strip optional MATCH keyword (Cypher compatibility)
-    var cleanPattern = pattern.trim();
-    if (cleanPattern.toUpperCase().startsWith('MATCH ')) {
-      cleanPattern = cleanPattern.substring(6).trim();
-    }
-
-    // Split by arrows but keep direction
-    final parts = <String>[];
-    final directions = <bool>[]; // true = forward (->), false = backward (<-)
-
-    var remaining = cleanPattern;
-    while (remaining.contains('->') || remaining.contains('<-')) {
-      final forwardIdx = remaining.indexOf('->');
-      final backwardIdx = remaining.indexOf('<-');
-      
-      if (forwardIdx != -1 && (backwardIdx == -1 || forwardIdx < backwardIdx)) {
-        parts.add(remaining.substring(0, forwardIdx));
-        directions.add(true);
-        remaining = remaining.substring(forwardIdx + 2);
-      } else if (backwardIdx != -1) {
-        parts.add(remaining.substring(0, backwardIdx));
-        directions.add(false);
-        remaining = remaining.substring(backwardIdx + 2);
+    for (final path in paths) {
+      for (final entry in path.nodes.entries) {
+        results.putIfAbsent(entry.key, () => <String>{}).add(entry.value);
       }
     }
-    parts.add(remaining);
-    
-    // Process the pattern
-    Set<String> currentNodes = startId != null ? {startId} : {};
-    
-    for (var i = 0; i < parts.length; i++) {
-      final part = parts[i];
-      
-      // Extract variable name (handle parts that start with edge info)
-      String varName;
-      if (part.startsWith('[')) {
-        // Part starts with edge info like "[:EDGE]-varname"
-        final afterEdge = part.substring(part.indexOf('-') + 1);
-        varName = afterEdge.split(RegExp(r'[-\[:]')).first.trim();
-      } else {
-        // Normal case: "varname" or "varname:Type" or "varname-[:EDGE]"
-        varName = part.split(RegExp(r'[-\[:]')).first.trim();
-      }
-      
-      // If first part and no startId, find matching nodes
-      if (i == 0 && startId == null) {
-        // Support syntax: name[:Type]{label=Exact} or {label~Substr}
-        // Examples:
-        //  - user:User                => all nodes of type User
-        //  - user:User{label=Mark}    => type User AND label exactly 'Mark'
-        //  - user{label~ark}          => any type, label contains 'ark' (case-insensitive)
-        // IMPORTANT: When the first segment also contains an edge specifier
-        // (e.g. "user:User-[:EDGE]"), we must strip everything after the
-        // alias/type before extracting the filters. Mirror matchRows() logic.
-        String descriptor = parts.first.split(RegExp(r'[-\[]')).first.trim();
-        String? nodeType;
-        String? labelOp; // '=' or '~'
-        String? labelVal;
-
-        // Extract optional {label...}
-        String head = descriptor;
-        final braceStart = descriptor.indexOf('{');
-        if (braceStart != -1 && descriptor.endsWith('}')) {
-          head = descriptor.substring(0, braceStart).trim();
-          final inside = descriptor.substring(braceStart + 1, descriptor.length - 1).trim();
-          final m = RegExp(r'^label\s*([=~])\s*(.+)$').firstMatch(inside);
-          if (m != null) {
-            labelOp = m.group(1);
-            labelVal = m.group(2);
-          } else if (inside.isNotEmpty) {
-            // Malformed label filter - return empty results
-            return <String, Set<String>>{};
-          }
-        }
-
-        // Extract optional :Type from head
-        if (head.contains(':')) {
-          final typeParts = head.split(':');
-          nodeType = typeParts.length > 1 ? typeParts[1].trim() : null;
-        }
-
-        // Find initial seed nodes by type and/or label filter
-        if (nodeType != null || labelOp != null) {
-          for (final node in graph.nodesById.values) {
-            if (nodeType != null && node.type != nodeType) continue;
-            if (labelOp != null && labelVal != null) {
-              if (labelOp == '=') {
-                if (node.label != labelVal) continue;
-              } else if (labelOp == '~') {
-                final hay = node.label.toLowerCase();
-                final needle = labelVal.toLowerCase();
-                if (!hay.contains(needle)) continue;
-              }
-            }
-            currentNodes.add(node.id);
-          }
-        }
-      }
-      
-      // Store current nodes
-      if (currentNodes.isNotEmpty) {
-        results[varName] = currentNodes;
-      }
-      
-      // Traverse edge if not last part
-      if (i < parts.length - 1) {
-        // For backward patterns, edge info is in the next part
-        final isForward = directions[i];
-        final edgePart = isForward ? part : parts[i + 1];
-        final edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(edgePart);
-        if (edgeMatch == null) continue;
-
-        final edgeType = edgeMatch.group(1)!;
-        
-        final nextNodes = <String>{};
-        for (final nodeId in currentNodes) {
-          if (isForward) {
-            nextNodes.addAll(graph.outNeighbors(nodeId, edgeType));
-          } else {
-            nextNodes.addAll(graph.inNeighbors(nodeId, edgeType));
-          }
-        }
-        
-        currentNodes = nextNodes;
-      }
-    }
-    
     return results;
   }
   
