@@ -40,7 +40,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
   String? selectedNodeId;
   bool _showCode = true;
   late String _graphSetupCode;
-  String? _lastPattern;
+  String? lastPattern;
   Set<String> _highlightEdgeTypes = const {};
   Set<String> _highlightNodeIds = const {};
 
@@ -109,7 +109,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     try {
       final results = query.match(pattern);
       final paths = query.matchPaths(pattern);
-      _lastPattern = pattern;
+      lastPattern = pattern;
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
       // Build highlighted nodes from grouped results
       final hi = <String>{};
@@ -322,7 +322,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                           queryResults = null;
                           queryRows = null;
                           queryPaths = null;
-                          _lastPattern = null;
+                          lastPattern = null;
                           _highlightEdgeTypes = const {};
                           _highlightNodeIds = const {};
                         }),
@@ -529,7 +529,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     );
   }
 
-  Widget _buildRowsQueryChip(String label, String pattern, {String? startId}) {
+  Widget buildRowsQueryChip(String label, String pattern, {String? startId}) {
     return ActionChip(
       label: Text(label, style: const TextStyle(fontSize: 12)),
       onPressed: () {
@@ -563,7 +563,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
           ? query.matchPaths(pattern, startId: startId)
           : query.matchPaths(pattern);
       debugPrint('Query: $pattern, StartId: $startId, Results: $results');
-      _lastPattern = pattern;
+      lastPattern = pattern;
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
       // Build highlighted nodes from grouped results
       final hi = <String>{};
@@ -604,7 +604,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
           ? query.matchRows(pattern, startId: startId)
           : query.matchRows(pattern);
       debugPrint('Rows Query: $pattern, StartId: $startId, Rows: ${rows.length}');
-      _lastPattern = pattern;
+      lastPattern = pattern;
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
       // Build highlighted nodes from row results
       final hi = <String>{};
@@ -644,7 +644,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
   }
 
   // --- Helper to build detailed path description ---
-  String _buildPathDescription(PathMatch path) {
+  String buildPathDescription(PathMatch path) {
     final parts = <String>[];
 
     // Get the variables in a logical order for path display
