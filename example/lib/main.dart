@@ -36,6 +36,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
   final TextEditingController _queryController = TextEditingController();
   Map<String, Set<String>>? queryResults;
   List<Map<String, String>>? queryRows;
+  List<PathMatch>? queryPaths;
   String? selectedNodeId;
   bool _showCode = true;
   late String _graphSetupCode;
@@ -97,6 +98,8 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     if (pattern.isEmpty) {
       setState(() {
         queryResults = null;
+        queryRows = null;
+        queryPaths = null;
         _highlightEdgeTypes = const {};
         _highlightNodeIds = const {};
       });
@@ -105,6 +108,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
 
     try {
       final results = query.match(pattern);
+      final paths = query.matchPaths(pattern);
       _lastPattern = pattern;
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
       // Build highlighted nodes from grouped results
@@ -116,11 +120,14 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       setState(() {
         queryRows = null;
         queryResults = results;
+        queryPaths = paths;
       });
     } catch (e) {
       debugPrint('Query error: $e');
       setState(() {
         queryResults = {'error': {'Query failed: $e'}};
+        queryRows = null;
+        queryPaths = null;
         _highlightEdgeTypes = const {};
         _highlightNodeIds = const {};
       });
@@ -154,17 +161,38 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                   spacing: 8,
                   runSpacing: 4,
                   children: [
+                    // Basic queries
                     _buildQueryChip('All People', 'person:Person'),
                     _buildQueryChip('All Teams', 'team:Team'),
                     _buildQueryChip('All Projects', 'project:Project'),
+
+                    // Full chain examples - these show complete paths!
+                    _buildQueryChip('🛤️ Work Chain', 'person:Person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project'),
+                    _buildQueryChip('🛤️ Management Chain', 'person:Person-[:MANAGES]->team-[:ASSIGNED_TO]->project'),
+
+                    // Simple 2-hop chains
                     _buildQueryChip('Who Works Where', 'person:Person-[:WORKS_FOR]->team'),
-                    _buildQueryChip('Who Leads What', 'person:Person-[:LEADS]->project'),
-                    _buildQueryChip('Team Assignments', 'team:Team-[:ASSIGNED_TO]->project'),
-                    _buildQueryChip('Management Chain', 'person:Person-[:MANAGES]->team'),
-                    _buildQueryChip('Engineering Members', 'team:Team{label=Engineering}<-[:WORKS_FOR]-person'),
-                    _buildQueryChip('Senior Developers', 'person:Person{level=Senior}'),
-                    _buildQueryChip('Active Projects', 'project:Project{status=active}'),
-                    _buildRowsQueryChip('Alice\'s Access Path', 'person:Person{label~Alice}-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project'),
+                    _buildQueryChip('Team Projects', 'team:Team-[:ASSIGNED_TO]->project'),
+                    _buildQueryChip('Project Leaders', 'project:Project<-[:LEADS]-person'),
+
+                    // Filtered examples
+                    _buildQueryChip('Engineering Team', 'team:Team{label=Engineering}<-[:WORKS_FOR]-person'),
+
+                    // StartId examples - specific starting points
+                    const SizedBox(width: 16), // spacer
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text('Specific Starting Points:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildStartIdQueryChip('🎯 Alice\'s Path', 'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project', 'alice'),
+                    _buildStartIdQueryChip('🎯 Bob\'s Work Path', 'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project', 'bob'),
+                    _buildStartIdQueryChip('🎯 Charlie\'s Management', 'person-[:MANAGES]->team-[:ASSIGNED_TO]->project', 'charlie'),
+                    _buildStartIdQueryChip('🎯 Web App Team', 'project<-[:ASSIGNED_TO]-team<-[:WORKS_FOR]-person', 'web_app'),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -235,6 +263,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                   ),
                 ],
 
+
                 const SizedBox(height: 16),
 
                 // Node inspector
@@ -272,7 +301,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                           minLines: 1,
                           style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                           decoration: const InputDecoration(
-                            hintText: 'e.g., person:Person-[:WORKS_FOR]->team',
+                            hintText: 'e.g., person:Person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
                             hintStyle: TextStyle(fontSize: 11),
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -292,6 +321,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                           _queryController.clear();
                           queryResults = null;
                           queryRows = null;
+                          queryPaths = null;
                           _lastPattern = null;
                           _highlightEdgeTypes = const {};
                           _highlightNodeIds = const {};
@@ -364,6 +394,86 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                       ),
                     ),
                   ),
+
+                // Path Results (routes) - Full width below graph
+                if (queryPaths != null && queryPaths!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('🛤️ Complete Paths', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade100,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text('${queryPaths!.length}', style: TextStyle(fontSize: 12, color: Colors.blue.shade800)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            border: Border.all(color: Colors.blue.shade200),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: queryPaths!.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final path = entry.value;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade600,
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          '${index + 1}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        _buildSimplePathDescription(path),
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontFamily: 'monospace',
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -405,6 +515,20 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     );
   }
 
+  Widget _buildStartIdQueryChip(String label, String pattern, String startId) {
+    return ActionChip(
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      onPressed: () {
+        setState(() {
+          _queryController.text = pattern;
+        });
+        _executeQueryWithStartId(pattern, startId);
+      },
+      backgroundColor: Colors.orange.shade50,
+      side: BorderSide(color: Colors.orange.shade300),
+    );
+  }
+
   Widget _buildRowsQueryChip(String label, String pattern, {String? startId}) {
     return ActionChip(
       label: Text(label, style: const TextStyle(fontSize: 12)),
@@ -423,6 +547,8 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     if (pattern.isEmpty) {
       setState(() {
         queryResults = null;
+        queryRows = null;
+        queryPaths = null;
         _highlightEdgeTypes = const {};
         _highlightNodeIds = const {};
       });
@@ -433,6 +559,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       final results = startId != null
           ? query.match(pattern, startId: startId)
           : query.match(pattern);
+      final paths = startId != null
+          ? query.matchPaths(pattern, startId: startId)
+          : query.matchPaths(pattern);
       debugPrint('Query: $pattern, StartId: $startId, Results: $results');
       _lastPattern = pattern;
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
@@ -442,13 +571,18 @@ class _GraphVisualizationState extends State<GraphVisualization> {
         hi.addAll(s);
       }
       _highlightNodeIds = hi;
+      debugPrint('Highlight Edge Types: $_highlightEdgeTypes');
+      debugPrint('Highlight Node IDs: $_highlightNodeIds');
       setState(() {
         queryRows = null;
         queryResults = results;
+        queryPaths = paths;
       });
     } catch (e) {
        setState(() {
          queryResults = {'error': {'Query failed: ${e.toString()}'}};
+         queryRows = null;
+         queryPaths = null;
          _highlightEdgeTypes = const {};
          _highlightNodeIds = const {};
        });
@@ -492,6 +626,87 @@ class _GraphVisualizationState extends State<GraphVisualization> {
         _highlightNodeIds = const {};
       });
     }
+  }
+
+  // --- Helper to build simple, readable path description ---
+  String _buildSimplePathDescription(PathMatch path) {
+    final orderedVars = _orderPathVariables(path.nodes.keys.toList(), path);
+    final parts = <String>[];
+
+    for (final variable in orderedVars) {
+      final nodeId = path.nodes[variable];
+      final node = nodeId != null ? graph.nodesById[nodeId] : null;
+      final label = node?.label ?? nodeId ?? variable;
+      parts.add(label);
+    }
+
+    return parts.join(' → ');
+  }
+
+  // --- Helper to build detailed path description ---
+  String _buildPathDescription(PathMatch path) {
+    final parts = <String>[];
+
+    // Get the variables in a logical order for path display
+    final variables = path.nodes.keys.toList();
+    variables.sort(); // Sort alphabetically as fallback
+
+    // Try to order by common patterns (person -> team -> project, etc.)
+    final orderedVars = _orderPathVariables(variables, path);
+
+    for (var i = 0; i < orderedVars.length; i++) {
+      final variable = orderedVars[i];
+      final nodeId = path.nodes[variable];
+      final node = nodeId != null ? graph.nodesById[nodeId] : null;
+      final label = node?.label ?? nodeId ?? variable;
+
+      if (i == 0) {
+        parts.add(label);
+      } else {
+        // Try to find the edge type between previous and current variable
+        final prevVar = orderedVars[i - 1];
+        final edgeType = _findEdgeTypeBetween(path, prevVar, variable);
+        parts.add(' -[:${edgeType ?? "?"}]-> $label');
+      }
+    }
+
+    return parts.join('');
+  }
+
+  List<String> _orderPathVariables(List<String> variables, PathMatch path) {
+    // Common ordering patterns
+    final priority = {
+      'person': 0, 'user': 0, 'employee': 0, 'member': 0,
+      'team': 10, 'group': 10, 'department': 10,
+      'project': 20, 'task': 20, 'initiative': 20,
+      'resource': 30, 'asset': 30, 'database': 30,
+    };
+
+    variables.sort((a, b) {
+      final aScore = priority[a.toLowerCase()] ?? 50;
+      final bScore = priority[b.toLowerCase()] ?? 50;
+      if (aScore != bScore) return aScore.compareTo(bScore);
+      return a.compareTo(b);
+    });
+
+    return variables;
+  }
+
+  String? _findEdgeTypeBetween(PathMatch path, String fromVar, String toVar) {
+    final fromId = path.nodes[fromVar];
+    final toId = path.nodes[toVar];
+
+    if (fromId == null || toId == null) return null;
+
+    // Find edge between these two nodes
+    for (final edge in path.edges) {
+      if ((edge.fromVariable == fromVar && edge.toVariable == toVar) ||
+          (edge.fromVariable == toVar && edge.toVariable == fromVar)) {
+        return edge.type;
+      }
+    }
+
+    return null;
   }
 
   // --- Helpers to render a code box reflecting the current graph setup ---

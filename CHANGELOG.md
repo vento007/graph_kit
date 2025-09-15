@@ -1,3 +1,8 @@
+## 0.6.0
+
+• Added PathMatch and PathEdge classes for complete path results with Neo4j-style edge information
+• New matchPaths() and matchPathsMany() methods for full path traversal details
+
 ## 0.5.2
 
 • Example: improved graph demo with better edge routing, layout, and UX

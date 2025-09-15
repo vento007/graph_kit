@@ -2,6 +2,100 @@
 import 'graph.dart';
 import 'node.dart';
 
+/// Represents an edge in a path result, containing connection information.
+class PathEdge {
+  /// Source node ID
+  final String from;
+
+  /// Target node ID
+  final String to;
+
+  /// Edge type (e.g., 'WORKS_FOR', 'MANAGES')
+  final String type;
+
+  /// Variable name for source node from pattern (e.g., 'person')
+  final String fromVariable;
+
+  /// Variable name for target node from pattern (e.g., 'team')
+  final String toVariable;
+
+  const PathEdge({
+    required this.from,
+    required this.to,
+    required this.type,
+    required this.fromVariable,
+    required this.toVariable,
+  });
+
+  @override
+  String toString() => '$fromVariable($from) -[:$type]-> $toVariable($to)';
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PathEdge &&
+          runtimeType == other.runtimeType &&
+          from == other.from &&
+          to == other.to &&
+          type == other.type &&
+          fromVariable == other.fromVariable &&
+          toVariable == other.toVariable;
+
+  @override
+  int get hashCode =>
+      from.hashCode ^
+      to.hashCode ^
+      type.hashCode ^
+      fromVariable.hashCode ^
+      toVariable.hashCode;
+}
+
+/// Represents a complete path match result with both nodes and edges.
+class PathMatch {
+  /// Map of variable names to node IDs (same format as matchRows)
+  final Map<String, String> nodes;
+
+  /// Ordered list of edges in the path
+  final List<PathEdge> edges;
+
+  const PathMatch({
+    required this.nodes,
+    required this.edges,
+  });
+
+  @override
+  String toString() => 'PathMatch(nodes: $nodes, edges: $edges)';
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PathMatch &&
+          runtimeType == other.runtimeType &&
+          _mapEquals(nodes, other.nodes) &&
+          _listEquals(edges, other.edges);
+
+  @override
+  int get hashCode => nodes.hashCode ^ edges.hashCode;
+
+  bool _mapEquals<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (!b.containsKey(key) || a[key] != b[key]) return false;
+    }
+    return true;
+  }
+
+  bool _listEquals<T>(List<T> a, List<T> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+}
+
 /// A powerful pattern-based query engine for graph traversal, inspired by Cypher.
 ///
 /// This class provides methods to execute graph queries using a mini-language
@@ -278,11 +372,17 @@ class PatternQuery<N extends Node> {
   /// }
   /// ```
   List<Map<String, String>> matchRows(String pattern, {String? startId}) {
+    // Strip optional MATCH keyword (Cypher compatibility)
+    var cleanPattern = pattern.trim();
+    if (cleanPattern.toUpperCase().startsWith('MATCH ')) {
+      cleanPattern = cleanPattern.substring(6).trim();
+    }
+
     // Split by arrows while preserving direction metadata
     final parts = <String>[];
     final directions = <bool>[]; // true = forward (->), false = backward (<-)
 
-    var remaining = pattern;
+    var remaining = cleanPattern;
     while (remaining.contains('->') || remaining.contains('<-')) {
       final forwardIdx = remaining.indexOf('->');
       final backwardIdx = remaining.indexOf('<-');
@@ -366,13 +466,15 @@ class PatternQuery<N extends Node> {
       final aliasHere = aliasOf(part);
       final nextAlias = aliasOf(parts[i + 1]);
 
-      final edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(part);
+      // For backward patterns, edge info is in the next part
+      final isForward = directions[i];
+      final edgePart = isForward ? part : parts[i + 1];
+      final edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(edgePart);
       if (edgeMatch == null) {
         // No edge specified; cannot advance
         return const <Map<String, String>>[];
       }
       final edgeType = edgeMatch.group(1)!;
-      final isForward = directions[i];
 
       final nextRows = <Map<String, String>>[];
       final seen = <String>{}; // dedupe identical rows
@@ -415,6 +517,225 @@ class PatternQuery<N extends Node> {
       }
     }
     return out;
+  }
+
+  /// Executes a pattern and returns complete path information including edges.
+  ///
+  /// Similar to [matchRows] but returns [PathMatch] objects that include both
+  /// the node mappings and the ordered edges in each path, providing complete
+  /// path information like Neo4j.
+  ///
+  /// Each [PathMatch] contains:
+  /// - `nodes`: Map of variable names to node IDs (same as matchRows)
+  /// - `edges`: Ordered list of [PathEdge] objects showing connections
+  ///
+  /// Example:
+  /// ```dart
+  /// final paths = query.matchPaths('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project');
+  /// for (final path in paths) {
+  ///   print('Nodes: ${path.nodes}'); // {person: alice, team: engineering, project: web_app}
+  ///   for (final edge in path.edges) {
+  ///     print(edge); // person(alice) -[:WORKS_FOR]-> team(engineering)
+  ///   }
+  /// }
+  /// ```
+  ///
+  /// Returns a list of [PathMatch] objects, where each represents one complete
+  /// path through the graph with both node and edge information.
+  List<PathMatch> matchPaths(String pattern, {String? startId}) {
+    // First get the regular row results
+    final rows = matchRows(pattern, startId: startId);
+
+    // Convert each row to a PathMatch with edge information
+    final pathMatches = <PathMatch>[];
+
+    for (final row in rows) {
+      final edges = _buildEdgesForRow(pattern, row);
+      pathMatches.add(PathMatch(nodes: row, edges: edges));
+    }
+
+    return pathMatches;
+  }
+
+  /// Execute multiple patterns and return path matches with edge information.
+  ///
+  /// Similar to [matchRowsMany] but returns [PathMatch] objects with complete
+  /// path information including edges.
+  List<PathMatch> matchPathsMany(List<String> patterns, {String? startId}) {
+    final out = <PathMatch>[];
+    final seen = <String>{};
+
+    for (final pattern in patterns) {
+      final paths = matchPaths(pattern, startId: startId);
+      for (final path in paths) {
+        final keys = path.nodes.keys.toList()..sort();
+        final sig = keys.map((k) => '$k=${path.nodes[k]}').join('|');
+        if (seen.add(sig)) out.add(path);
+      }
+    }
+
+    return out;
+  }
+
+  /// Build PathEdge objects for a given row result by parsing the pattern.
+  List<PathEdge> _buildEdgesForRow(String pattern, Map<String, String> row) {
+    final edges = <PathEdge>[];
+
+    // Strip optional MATCH keyword
+    var cleanPattern = pattern.trim();
+    if (cleanPattern.toUpperCase().startsWith('MATCH ')) {
+      cleanPattern = cleanPattern.substring(6).trim();
+    }
+
+    // Parse the pattern to extract edge information
+    // Split by arrows to get segments
+    final parts = <String>[];
+    final directions = <bool>[]; // true = forward (->), false = backward (<-)
+
+    var remaining = cleanPattern;
+    while (remaining.contains('->') || remaining.contains('<-')) {
+      final forwardIdx = remaining.indexOf('->');
+      final backwardIdx = remaining.indexOf('<-');
+
+      int splitIdx;
+      bool isForward;
+
+      if (forwardIdx == -1) {
+        splitIdx = backwardIdx;
+        isForward = false;
+      } else if (backwardIdx == -1) {
+        splitIdx = forwardIdx;
+        isForward = true;
+      } else {
+        if (forwardIdx < backwardIdx) {
+          splitIdx = forwardIdx;
+          isForward = true;
+        } else {
+          splitIdx = backwardIdx;
+          isForward = false;
+        }
+      }
+
+      // Extract part before arrow
+      parts.add(remaining.substring(0, splitIdx).trim());
+      directions.add(isForward);
+
+      // Move past the arrow
+      remaining = remaining.substring(splitIdx + 2).trim();
+    }
+
+    // Add the final part
+    if (remaining.isNotEmpty) {
+      parts.add(remaining.trim());
+    }
+
+    // Build edges from the parsed parts
+    for (int i = 0; i < directions.length; i++) {
+      final fromPart = parts[i];
+      final toPart = parts[i + 1];
+      final isForward = directions[i];
+
+      // Extract variable names
+      final fromVar = _extractVariableName(fromPart);
+      final toVar = _extractVariableName(toPart);
+
+      if (fromVar == null || toVar == null) continue;
+      if (!row.containsKey(fromVar) || !row.containsKey(toVar)) continue;
+
+      // Extract edge type from the pattern between parts
+      final edgeType = _extractEdgeTypeFromParts(fromPart, toPart, cleanPattern, isForward);
+      if (edgeType == null) continue;
+
+      // Create the edge based on direction
+      if (isForward) {
+        edges.add(PathEdge(
+          from: row[fromVar]!,
+          to: row[toVar]!,
+          type: edgeType,
+          fromVariable: fromVar,
+          toVariable: toVar,
+        ));
+      } else {
+        edges.add(PathEdge(
+          from: row[toVar]!,
+          to: row[fromVar]!,
+          type: edgeType,
+          fromVariable: toVar,
+          toVariable: fromVar,
+        ));
+      }
+    }
+
+    return edges;
+  }
+
+  /// Extract variable name from a pattern part (e.g., "user:User{label=Alice}" -> "user")
+  String? _extractVariableName(String part) {
+    if (part.isEmpty) return null;
+
+    // Handle parts that start with edge syntax like "[:LEADS]-person"
+    if (part.startsWith('[')) {
+      // Find the end of the edge syntax and look for variable after dash
+      final edgeEnd = part.indexOf(']');
+      if (edgeEnd != -1) {
+        final afterEdge = part.substring(edgeEnd + 1).trim();
+        if (afterEdge.startsWith('-')) {
+          final varPart = afterEdge.substring(1).trim();
+          if (varPart.isNotEmpty) {
+            part = varPart;
+          }
+        }
+      }
+    } else {
+      // Remove edge syntax if present in the middle or end
+      part = part.replaceAll(RegExp(r'\[\s*:\s*\w+\s*\]'), '').trim();
+      // Remove trailing dash that might be left after edge removal
+      part = part.replaceAll(RegExp(r'-+$'), '').trim();
+    }
+
+    // Variable name is before any : or { characters
+    final colonIdx = part.indexOf(':');
+    final braceIdx = part.indexOf('{');
+
+    int endIdx = part.length;
+    if (colonIdx != -1 && braceIdx != -1) {
+      endIdx = colonIdx < braceIdx ? colonIdx : braceIdx;
+    } else if (colonIdx != -1) {
+      endIdx = colonIdx;
+    } else if (braceIdx != -1) {
+      endIdx = braceIdx;
+    }
+
+    final varName = part.substring(0, endIdx).trim();
+    return varName.isEmpty ? null : varName;
+  }
+
+  /// Extract edge type by finding the edge syntax between two parts
+  String? _extractEdgeTypeFromParts(String fromPart, String toPart, String fullPattern, bool isForward) {
+    // For backward patterns, the edge info is in the toPart
+    // For forward patterns, the edge info is in the fromPart (or between parts)
+    String searchPart;
+    if (isForward) {
+      // Look in fromPart first, then between parts
+      var edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(fromPart);
+      if (edgeMatch != null) return edgeMatch.group(1);
+
+      // Look between parts as fallback
+      final fromEnd = fullPattern.indexOf(fromPart) + fromPart.length;
+      final toStart = fullPattern.indexOf(toPart, fromEnd);
+      if (fromEnd < toStart) {
+        final betweenParts = fullPattern.substring(fromEnd, toStart);
+        edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(betweenParts);
+        return edgeMatch?.group(1);
+      }
+      return null;
+    } else {
+      // Backward pattern: edge info is in toPart like "[:LEADS]-person"
+      searchPart = toPart;
+    }
+
+    final edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(searchPart);
+    return edgeMatch?.group(1);
   }
 
   // --- Utility finder methods ---

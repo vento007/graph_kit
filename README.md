@@ -47,6 +47,7 @@ A tiny, in-memory, typed directed multigraph with:
 - **Typed edges** (e.g., `WORKS_FOR`, `MANAGES`, `ASSIGNED_TO`, `DEPENDS_ON`)
 - **Multiple relationships** between the same nodes
 - A minimal, Cypher-inspired pattern engine for traversal
+- **Complete path results** with Neo4j-style edge information
 
 See runnable examples in `example/bin/` and the sample graph in `example/lib/data.dart`.
 
@@ -334,6 +335,89 @@ for (final r in rows) {
 Notes:
 - The first segment supports optional `:Type` and `{label=...}`/`{label~...}` filters for seeding.
 - Intermediate segments currently match by structure (alias and edges); type/label filters may be added later if needed.
+
+## Complete path results with edges (v0.6.0+)
+
+For Neo4j-style path results that include both node mappings and complete edge information, use `matchPaths()`:
+
+```dart
+final paths = pq.matchPaths('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project');
+
+for (final path in paths) {
+  // Nodes: Map<String, String> - variable names to node IDs
+  print('Nodes: ${path.nodes}');
+
+  // Edges: List<PathEdge> - ordered connection details
+  for (final edge in path.edges) {
+    print('Edge: ${edge.from} -[:${edge.type}]-> ${edge.to}');
+    print('  Variables: ${edge.fromVariable} -> ${edge.toVariable}');
+  }
+  print('---');
+}
+```
+
+**Example output:**
+```
+Nodes: {person: alice, team: engineering, project: web_app}
+Edge: alice -[:WORKS_FOR]-> engineering
+  Variables: person -> team
+Edge: engineering -[:ASSIGNED_TO]-> web_app
+  Variables: team -> project
+---
+Nodes: {person: alice, team: engineering, project: mobile_app}
+Edge: alice -[:WORKS_FOR]-> engineering
+  Variables: person -> team
+Edge: engineering -[:ASSIGNED_TO]-> mobile_app
+  Variables: team -> project
+---
+```
+
+**Accessing PathEdge properties:**
+```dart
+final edge = path.edges.first;
+final fromNodeId = edge.from;          // 'alice'
+final toNodeId = edge.to;              // 'engineering'
+final edgeType = edge.type;            // 'WORKS_FOR'
+final fromVar = edge.fromVariable;     // 'person'
+final toVar = edge.toVariable;         // 'team'
+
+// Get actual node objects if needed
+final fromNode = graph.nodesById[fromNodeId];  // Node(id: 'alice', ...)
+final toNode = graph.nodesById[toNodeId];      // Node(id: 'engineering', ...)
+```
+
+Each `PathMatch` object contains:
+- **`nodes`**: Map of variable names to node IDs (same as `matchRows()`)
+- **`edges`**: Ordered list of `PathEdge` objects with complete connection details
+
+Each `PathEdge` provides:
+- **`from`/`to`**: Source and target node IDs
+- **`type`**: Edge type (e.g., 'WORKS_FOR', 'ASSIGNED_TO')
+- **`fromVariable`/`toVariable`**: Variable names from the pattern
+
+**Multiple pattern support:**
+```dart
+final paths = pq.matchPathsMany([
+  'person-[:LEADS]->project',
+  'person-[:WORKS_FOR]->team'
+], startId: 'alice');
+
+for (final path in paths) {
+  print('${path.nodes}');
+}
+```
+
+**Example output:**
+```
+{person: alice, project: web_app}
+{person: alice, team: engineering}
+```
+
+**Use cases:**
+- **Path visualization**: Show complete routes through your graph
+- **Audit trails**: Track exactly how entities are connected
+- **Neo4j migration**: Drop-in replacement for Neo4j path results
+- **Edge analysis**: Understand relationship types in your traversals
 
 ## Generic traversal utilities (new)
 
