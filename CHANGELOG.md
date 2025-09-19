@@ -1,5 +1,5 @@
 
-## 0.6.2+2
+## 0.6.3
 
 • Fix: changed topics for package SEO
 
