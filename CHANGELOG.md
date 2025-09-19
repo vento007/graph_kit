@@ -1,3 +1,7 @@
+## 0.6.2+1
+
+• Fix: code formatting to meet pub.dev static analysis requirements
+
 ## 0.6.2
 
 • Docs: rewrote README.md for clearer presentation and updated examples to use published package
