@@ -1,3 +1,7 @@
+## 0.6.2
+
+• Docs: rewrote README.md for clearer presentation and updated examples to use published package
+
 ## 0.6.1
 
 • Fix: match() method now returns only connected nodes instead of all nodes of matching type

@@ -1,5 +1,3 @@
- 
-
 <div align="center">
 
 <p>
@@ -8,14 +6,11 @@
 
 <h1 align="center">graph kit — lightweight typed directed multigraph + pattern queries</h1>
 
-<p align="center"><em>A tiny, in-memory, typed directed multigraph with Cypher-inspired pattern queries</em></p>
+<p align="center"><em>In-memory, typed directed multigraph with powerful and performant Cypher-inspired pattern queries</em></p>
 
 <p align="center">
   <a href="https://pub.dev/packages/graph_kit">
     <img src="https://img.shields.io/pub/v/graph_kit.svg" alt="Pub">
-  </a>
-  <a href="https://github.com/vento007/graph_kit">
-    <img src="https://img.shields.io/github/stars/vento007/graph_kit.svg?style=flat&logo=github&colorB=deeppink&label=stars" alt="Star on Github">
   </a>
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/license-MIT-purple.svg" alt="License: MIT">
@@ -41,7 +36,7 @@
 
 </div>
 
-A tiny, in-memory, typed directed multigraph with:
+In-memory, typed directed multigraph with:
 
 - **Typed nodes** (e.g., `Person`, `Team`, `Project`, `Resource`)
 - **Typed edges** (e.g., `WORKS_FOR`, `MANAGES`, `ASSIGNED_TO`, `DEPENDS_ON`)
@@ -49,153 +44,405 @@ A tiny, in-memory, typed directed multigraph with:
 - A minimal, Cypher-inspired pattern engine for traversal
 - **Complete path results** with Neo4j-style edge information
 
-See runnable examples in `example/bin/` and the sample graph in `example/lib/data.dart`.
-
-
 ## Table of Contents
 
-- [Quick Preview](#quick-preview)
-- [Pattern Query Examples](#pattern-query-examples)
-- [Mini-Cypher Reference](#mini-cypher-reference)
-- [Comparison with Cypher](#comparison-with-cypher)
-- [Core concepts](#core-concepts)
-- [Pattern syntax (mini, Cypher-inspired)](#pattern-syntax-mini-cypher-inspired)
-- [Quick start](#quick-start)
-- [Row-wise pattern results (new)](#row-wise-pattern-results-new)
-- [Generic traversal utilities (new)](#generic-traversal-utilities-new)
-- [JSON Serialization](#json-serialization)
-- [Examples index](#examples-index)
+- [1. Quick Preview](#1-quick-preview)
+- [2. Complete Usage Examples](#2-complete-usage-examples)
+- [3. Generic Traversal Utilities](#3-generic-traversal-utilities)
+- [4. Pattern Query Examples](#4-pattern-query-examples)
+- [5. Mini-Cypher Reference](#5-mini-cypher-reference)
+- [6. Comparison with Cypher](#6-comparison-with-cypher)
+- [7. Pattern syntax (mini, Cypher-inspired)](#7-pattern-syntax-mini-cypher-inspired)
+- [8. Design and performance](#8-design-and-performance)
+- [9. JSON Serialization](#9-json-serialization)
+- [10. Examples index](#10-examples-index)
 - [License](#license)
 
 
-## Quick Preview
+## 1. Quick Preview
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/vento007/graph_kit/main/media/screenshoot2.png" alt="Graph Kit demo preview" width="840" />
   <br/>
   <em>Mini-Cypher query highlighting nodes and edges in the Flutter demo.</em>
-  
+
 </p>
 
+## 2. Complete Usage Examples
 
-## Pattern Query Examples
+This section provides copy-paste ready examples demonstrating all major query methods with a sample graph. Each example can be run as a standalone Dart script.
+
+### 2.1 Setup: Sample Graph
+
+```dart
+import 'package:graph_kit/graph_kit.dart';
+
+void main() {
+  // Create graph and add sample data
+  final graph = Graph<Node>();
+
+  // Add people
+  graph.addNode(Node(id: 'alice', type: 'Person', label: 'Alice Cooper'));
+  graph.addNode(Node(id: 'bob', type: 'Person', label: 'Bob Wilson'));
+  graph.addNode(Node(id: 'charlie', type: 'Person', label: 'Charlie Davis'));
+
+  // Add teams
+  graph.addNode(Node(id: 'engineering', type: 'Team', label: 'Engineering'));
+  graph.addNode(Node(id: 'design', type: 'Team', label: 'Design Team'));
+  graph.addNode(Node(id: 'marketing', type: 'Team', label: 'Marketing'));
+
+  // Add projects
+  graph.addNode(Node(id: 'web_app', type: 'Project', label: 'Web Application'));
+  graph.addNode(Node(id: 'mobile_app', type: 'Project', label: 'Mobile App'));
+  graph.addNode(Node(id: 'campaign', type: 'Project', label: 'Ad Campaign'));
+
+  // Add relationships
+  graph.addEdge('alice', 'WORKS_FOR', 'engineering');
+  graph.addEdge('bob', 'WORKS_FOR', 'engineering');
+  graph.addEdge('charlie', 'MANAGES', 'engineering');
+  graph.addEdge('charlie', 'MANAGES', 'design');
+  graph.addEdge('charlie', 'MANAGES', 'marketing');
+  graph.addEdge('engineering', 'ASSIGNED_TO', 'web_app');
+  graph.addEdge('engineering', 'ASSIGNED_TO', 'mobile_app');
+  graph.addEdge('design', 'ASSIGNED_TO', 'mobile_app');
+  graph.addEdge('marketing', 'ASSIGNED_TO', 'campaign');
+  graph.addEdge('alice', 'LEADS', 'web_app');
+
+  final query = PatternQuery(graph);
+
+  // Run examples below...
+}
+```
+
+### 2.2 Basic Queries - Get Single Type
+
+```dart
+// Get all people, query.match returns Map<String, Set<String>>
+final people = query.match('person:Person');
+print(people); // {person: {alice, bob, charlie}}
+
+// Get all teams, query.match returns Map<String, Set<String>>
+final teams = query.match('team:Team');
+print(teams); // {team: {engineering, design, marketing}}
+
+// Get all projects, query.match returns Map<String, Set<String>>
+final projects = query.match('project:Project');
+print(projects); // {project: {web_app, mobile_app, campaign}}
+```
+
+### 2.3 Relationship Queries - Get Connected Nodes
+
+```dart
+// Find who works for teams, query.match returns Map<String, Set<String>>
+final workers = query.match('person:Person-[:WORKS_FOR]->team:Team');
+print(workers); // {person: {alice, bob}, team: {engineering}}
+
+// Find who manages teams, query.match returns Map<String, Set<String>>
+final managers = query.match('person:Person-[:MANAGES]->team:Team');
+print(managers); // {person: {charlie}, team: {engineering, design, marketing}}
+
+// Find team assignments to projects, query.match returns Map<String, Set<String>>
+final assignments = query.match('team:Team-[:ASSIGNED_TO]->project:Project');
+print(assignments); // {team: {engineering, design, marketing}, project: {web_app, mobile_app, campaign}}
+```
+
+### 2.4 Queries from Specific Starting Points
+
+```dart
+// What does Alice work on? query.match with startId returns Map<String, Set<String>>
+final aliceWork = query.match(
+  'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+  startId: 'alice'
+);
+print(aliceWork); // {person: {alice}, team: {engineering}, project: {web_app, mobile_app}}
+
+// What does Charlie manage? query.match with startId returns Map<String, Set<String>>
+final charlieManages = query.match(
+  'person-[:MANAGES]->team',
+  startId: 'charlie'
+);
+print(charlieManages); // {person: {charlie}, team: {engineering, design, marketing}}
+
+// Who works on the web app project? query.match with startId returns Map<String, Set<String>>
+final webAppTeam = query.match(
+  'project<-[:ASSIGNED_TO]-team<-[:WORKS_FOR]-person',
+  startId: 'web_app'
+);
+print(webAppTeam); // {project: {web_app}, team: {engineering}, person: {alice, bob}}
+```
+
+### 2.5 Row-wise Results - Preserve Path Relationships
+
+```dart
+// Get specific person-team-project combinations, query.matchRows returns List<Map<String, String>>
+final rows = query.matchRows('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project');
+print(rows);
+// [
+//   {person: alice, team: engineering, project: web_app},
+//   {person: alice, team: engineering, project: mobile_app},
+//   {person: bob, team: engineering, project: web_app},
+//   {person: bob, team: engineering, project: mobile_app}
+// ]
+
+// Access individual path data
+print(rows.first); // {person: alice, team: engineering, project: web_app}
+print(rows.first['person']); // alice
+print(rows.first['team']); // engineering
+```
+
+### 2.6 Complete Path Results with Edge Information
+
+```dart
+// Get complete path information, query.matchPaths returns List<PathMatch>
+final paths = query.matchPaths('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project');
+print(paths.length); // 4
+
+// Print all paths with edges
+for (final path in paths) {
+  print(path.nodes); // {person: alice, team: engineering, project: web_app}
+  for (final edge in path.edges) {
+    print('  ${edge.from} -[:${edge.type}]-> ${edge.to}'); // alice -[:WORKS_FOR]-> engineering
+  }
+}
+```
+
+### 2.7 Multiple Pattern Queries
+
+```dart
+// Get all of Alice's connections, query.matchMany returns Map<String, Set<String>>
+final aliceConnections = query.matchMany([
+  'person-[:WORKS_FOR]->team',
+  'person-[:LEADS]->project'
+], startId: 'alice');
+print(aliceConnections); // {person: {alice}, team: {engineering}, project: {web_app}}
+
+// Combine multiple relationship types, query.matchMany returns Map<String, Set<String>>
+final allConnections = query.matchMany([
+  'person:Person-[:WORKS_FOR]->team:Team',
+  'person:Person-[:MANAGES]->team:Team',
+  'person:Person-[:LEADS]->project:Project'
+]);
+print(allConnections); // {person: {alice, bob, charlie}, team: {engineering, design, marketing}, project: {web_app}}
+```
+
+### 2.8 Utility Methods
+
+```dart
+// Find by type, query.findByType returns Set<String>
+final allPeople = query.findByType('Person');
+print(allPeople); // {alice, bob, charlie}
+
+// Find by exact label, query.findByLabelEquals returns Set<String>
+final aliceIds = query.findByLabelEquals('Alice Cooper');
+print(aliceIds); // {alice}
+
+// Find by label substring, query.findByLabelContains returns Set<String>
+final bobUsers = query.findByLabelContains('bob');
+print(bobUsers); // {bob}
+
+// Direct edge traversal, query.outFrom returns Set<String>
+final aliceTeams = query.outFrom('alice', 'WORKS_FOR');
+print(aliceTeams); // {engineering}
+
+// Reverse edge traversal, query.inTo returns Set<String>
+final engineeringWorkers = query.inTo('engineering', 'WORKS_FOR');
+print(engineeringWorkers); // {alice, bob}
+```
+
+### 2.9 Summary of Query Methods
+
+| Method | Returns | Use Case |
+|--------|---------|----------|
+| `match()` | `Map<String, Set<String>>` | Get grouped node IDs by variable |
+| `matchMany()` | `Map<String, Set<String>>` | Combine multiple patterns |
+| `matchRows()` | `List<Map<String, String>>` | Preserve path relationships |
+| `matchPaths()` | `List<PathMatch>` | Complete path + edge information |
+| `findByType()` | `Set<String>` | All nodes of specific type |
+| `findByLabelEquals()` | `Set<String>` | Nodes by exact label match |
+| `findByLabelContains()` | `Set<String>` | Nodes by label substring |
+| `outFrom()`/`inTo()` | `Set<String>` | Direct edge traversal |
+
+## 3. Generic Traversal Utilities
+
+For BFS-style subgraph exploration around nodes within hop limits. Unlike pattern queries that follow specific paths, this explores neighborhoods in all directions using specified edge types.
+
+```dart
+// Using the same graph setup from section 2...
+// Add this to your existing code:
+
+// Explore everything within 2 hops from Alice, expandSubgraph returns SubgraphResult
+final aliceSubgraph = expandSubgraph(
+  graph,
+  seeds: {'alice'},
+  edgeTypesRightward: {'WORKS_FOR', 'MANAGES', 'ASSIGNED_TO', 'LEADS'},
+  forwardHops: 2,
+  backwardHops: 0,
+);
+print(aliceSubgraph.nodes); // {alice, engineering, web_app, mobile_app}
+print(aliceSubgraph.edges.length); // 4
+
+// Explore everything connected to engineering team, expandSubgraph returns SubgraphResult
+final engineeringSubgraph = expandSubgraph(
+  graph,
+  seeds: {'engineering'},
+  edgeTypesRightward: {'ASSIGNED_TO'},
+  edgeTypesLeftward: {'WORKS_FOR', 'MANAGES'},
+  forwardHops: 1,
+  backwardHops: 1,
+);
+print(engineeringSubgraph.nodes); // {engineering, web_app, mobile_app, alice, bob, charlie}
+print(engineeringSubgraph.edges.length); // 5
+
+// Find everyone within 2 hops of projects, expandSubgraph returns SubgraphResult
+final projectEcosystem = expandSubgraph(
+  graph,
+  seeds: {'web_app', 'mobile_app', 'campaign'},
+  edgeTypesRightward: {'WORKS_FOR', 'MANAGES'},
+  edgeTypesLeftward: {'ASSIGNED_TO', 'LEADS'},
+  forwardHops: 0,
+  backwardHops: 2,
+);
+print(projectEcosystem.nodes); // {web_app, mobile_app, campaign, engineering, alice, design, marketing}
+print(projectEcosystem.edges.length); // 7
+```
+
+### When to use vs Pattern Queries
+
+| Use Case | Pattern Queries | expandSubgraph |
+|----------|----------------|----------------|
+| **Specific paths** | `person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project` | No |
+| **Neighborhood exploration** | No | Yes - "Everything around Alice" |
+| **Impact analysis** | No | Yes - "What's affected by this change?" |
+| **Subgraph extraction** | No | Yes - For visualization/analysis |
+| **Known relationships** | Yes - Clear path patterns | No |
+| **Unknown structure** | No | Yes - Explore what's connected |
+
+## 4. Pattern Query Examples
 
 - **Simple patterns**: `"user:User"` → `{alice, bob, charlie}`
 - **Forward patterns**: `"user-[:MEMBER_OF]->group"`
 - **Backward patterns**: `"resource<-[:CAN_ACCESS]-group<-[:MEMBER_OF]-user"` → `{alice, bob}`
 - **Label filtering**: `"user:User{label~Admin}"` → `{bob}`
 
-## Mini-Cypher Reference
+## 5. Pattern Query Language (Mini-Cypher)
 
-Graph_kit supports a subset of Cypher syntax with some extensions. Here's the complete reference:
+GraphKit uses a simplified version of **Cypher** - the query language used by Neo4j (the most popular graph database). Think of it like SQL for graphs.
 
-### Keywords
+### What is Cypher?
 
-| Keyword | Support | Description |
-|---------|---------|-------------|
-| `MATCH` | Yes | Optional prefix for queries (Cypher compatibility) |
-| `RETURN` | No | Results automatically returned as map |
-| `WHERE` | Partial | Use `{label=value}` or `{label~substring}` instead |
+Cypher is a language designed to describe patterns in graphs. Instead of writing complex code to traverse relationships, you draw the path with text:
 
-### Node Syntax
+- **SQL**: `SELECT * FROM users WHERE department = 'engineering'`
+- **Cypher**: `person:Person-[:WORKS_FOR]->team:Team{label=Engineering}`
 
-```cypher
-variable:Type{filters}
+### What is "Mini-Cypher"?
+
+GraphKit supports a **subset** of Cypher - the most useful parts without the complexity:
+
+**Supported**: Basic patterns, node types, relationships, label filters
+**Not supported**: Complex WHERE clauses, variable-length paths, aggregations
+
+This gives you the power of graph queries without learning the full Cypher language.
+
+### How to Build Pattern Queries
+
+Think of pattern queries like giving directions. Instead of "turn left at the store", you're saying "follow this relationship to that type of thing".
+
+### Step 1: Start with What You Want to Find
+
+When you want to find all people in your company, you write:
+```dart
+query.match('person:Person')
 ```
 
-**Components:**
-- **`variable`**: Name for results map (required) - e.g., `person`, `user`, `employee`
-- **`:Type`**: Filter by node type (optional) - e.g., `:Person`, `:Team`
-- **`{filters}`**: Label filtering (optional)
+This breaks down into:
+- **`person`** = What you want to call them in your results (like a nickname)
+- **`:`** = "that are of type"
+- **`Person`** = The actual type of thing you're looking for
 
-**Node Examples:**
-```cypher
-person:Person              # All Person nodes
-user                       # All nodes (any type)
-manager:Person{label=Bob}  # Person nodes with exact label "Bob"
-admin:User{label~Admin}    # User nodes containing "Admin" in label
+Think of it like: "Find me all things of type Person, and I'll call them 'person' in my results"
+
+### Step 2: Connect Things with Arrows
+
+Now say you want to know "who works where". You connect person to team:
+```dart
+query.match('person:Person-[:WORKS_FOR]->team:Team')
 ```
 
-### Edge Syntax
+Reading left to right:
+- **`person:Person`** = "Start with a person"
+- **`-[`** = "who has a connection"
+- **`:WORKS_FOR`** = "of type WORKS_FOR"
+- **`]->`** = "that points to"
+- **`team:Team`** = "a team"
 
-```cypher
--[:EDGE_TYPE]->    # Forward relationship
-<-[:EDGE_TYPE]-    # Backward relationship
+Like saying: "Show me people who have a WORKS_FOR arrow pointing to teams"
+
+### Step 3: The Arrow Direction Matters!
+
+**Right arrow `->` means "going out from":**
+```dart
+person-[:WORKS_FOR]->team    // Person points to team (person works FOR the team)
 ```
 
-**Edge Examples:**
-```cypher
-person-[:WORKS_FOR]->team           # Forward: person works for team
-team<-[:WORKS_FOR]-person           # Backward: people who work for team
-user-[:MEMBER_OF]->group-[:CAN_ACCESS]->resource   # Multi-hop
+**Left arrow `<-` means "coming in to":**
+```dart
+team<-[:WORKS_FOR]-person    // Person points to team (team is worked for BY person)
 ```
 
-### Label Filters
+Same relationship, different starting point!
 
-| Filter | Example | Matches |
-|--------|---------|---------|
-| `{label=Bob}` | Exact match | Node with label exactly "Bob" |
-| `{label~bob}` | Contains (case-insensitive) | "Bob", "bob", "Bobby", "Bob Smith" |
+### Step 4: Chain Multiple Steps
 
-**Filter Examples:**
-```cypher
-person:Person{label=Alice Cooper}     # Exact name match
-user:User{label~admin}               # Any admin user
-team:Team{label=Engineering}         # Specific team
+Want to follow a longer path? Just keep adding arrows:
+```dart
+person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project
 ```
 
-### Complete Pattern Examples
+This means:
+1. Start with a person
+2. Follow their WORKS_FOR connection to a team
+3. Follow that team's ASSIGNED_TO connection to a project
 
-```cypher
-# Basic queries (with/without MATCH)
-person:Person
-MATCH person:Person
+Like following a trail: person → team → project
 
-# Relationships
-person:Person-[:WORKS_FOR]->team:Team
-MATCH person:Person-[:MANAGES]->team-[:ASSIGNED_TO]->project
+### Step 5: Filter by Name
 
-# Filtered queries
-person:Person{label~Alice}-[:WORKS_FOR]->team
-team:Team{label=Engineering}<-[:WORKS_FOR]-person
-
-# Multi-hop traversal
-MATCH person:Person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project
+Want to find a specific person? Add their name in curly braces:
+```dart
+person:Person{label=Alice Cooper}     // Find exactly "Alice Cooper"
+person:Person{label~alice}            // Find anyone with "alice" in their name
 ```
 
-### Variable Names in Results
+The `~` means "contains" (like a fuzzy search)
 
-Query results are organized by variable names:
+### Quick Examples to Try
 
 ```dart
-final results = query.match('manager:Person-[:MANAGES]->team:Team');
-// Returns: {'manager': {...}, 'team': {...}}
+// Simple: Find all people
+query.match('person:Person')
+// Returns: {person: {alice, bob, charlie}}
 
-final results2 = query.match('boss:Person-[:MANAGES]->group:Team');
-// Returns: {'boss': {...}, 'group': {...}}
+// Connection: Who works where?
+query.match('person-[:WORKS_FOR]->team')
+// Returns: {person: {alice, bob}, team: {engineering}}
+
+// Chain: Follow a path through the graph
+query.match('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project')
+// Returns: {person: {alice, bob}, team: {engineering}, project: {web_app, mobile_app}}
+
+// Backwards: What teams work on this project?
+query.match('project<-[:ASSIGNED_TO]-team', startId: 'web_app')
+// Returns: {project: {web_app}, team: {engineering}}
+
+// Filter: Find specific person
+query.match('person:Person{label~Alice}')
+// Returns: {person: {alice}}
 ```
 
-**Same node type, different roles:**
-```cypher
-owner:Person-[:OWNS]->project<-[:ASSIGNED_TO]-team<-[:WORKS_FOR]-worker:Person
-# Results: {'owner': {...}, 'worker': {...}, 'project': {...}, 'team': {...}}
-```
+**Remember:** The names you pick (`person`, `team`, etc.) become the keys in your results!
 
-### Syntax Limitations
-
-**Not Supported:**
-- Mixed directions in single pattern: `person-[:A]->team<-[:B]-other`
-- Variable length paths: `person-[:KNOWS*1..3]->friend`
-- Complex WHERE clauses: `WHERE person.age > 25`
-- Multiple MATCH statements
-- OPTIONAL MATCH
-
-**Workarounds:**
-- Use `matchMany()` for multiple patterns
-- Use label filters instead of WHERE
-- Use `matchRows()` for path-specific results
-
-## Comparison with Cypher
+## 6. Comparison with Cypher
 
 | Feature               | Real Cypher | graph_kit           |
 |-----------------------|-------------|---------------------|
@@ -204,244 +451,15 @@ owner:Person-[:OWNS]->project<-[:ASSIGNED_TO]-team<-[:WORKS_FOR]-worker:Person
 | Optional matches      | Yes         | Via `matchMany`     |
 | WHERE clauses         | Yes         | Via label filters   |
 
-## Core concepts
-
-- **Node**
-  - Each node has `id`, `type`, and `label`.
-  - Example: `u1`, type=`User`, label=`Mark`.
-- **Edge types**
-  - Relationship labels between nodes, used to traverse (e.g., `WORKS_FOR`, `MANAGES`).
-- **Graph&lt;N extends Node&gt;**
-  - `addNode(n)`, `addEdge(src, edgeType, dst)`.
-  - `outNeighbors(srcId, edgeType)`, `inNeighbors(dstId, edgeType)`.
-- **PatternQuery&lt;N extends Node&gt;**
-  - `match(pattern, {startId})` – run a single chain.
-  - `matchMany([patterns], {startId})` – run multiple independent chains and union results by variable name.
-
-## Pattern syntax (mini, Cypher-inspired)
-
-- Seeding without IDs: `alias:Type`
-  - Example: `'users:User'` seeds the first segment with all nodes whose `type == 'User'`.
-- Directional edges:
-  - Outgoing: `-[:EDGE]->` (uses `outNeighbors`)
-  - Incoming: `<-[:EDGE]-` (uses `inNeighbors`)
-- Variables (aliases):
-  - Each segment name is a key in the returned map.
-  - Example: `'users:User-[:MEMBER_OF]->group'` returns keys `'users:User'` and `'group'`.
-
-## Quick start
-
-1) Build the example graph
-
-```dart
-import 'package:graph_kit/graph_kit.dart';
-
-final g = Graph<Node>();
-// Add your nodes and edges here
-final pq = PatternQuery(g);
-```
-
-2) All users (no IDs needed)
-
-```dart
-final res = pq.match('users:User');
-for (final id in res['users:User'] ?? {}) {
-  final n = g.nodesById[id];
-  print('$id (${n?.type}: ${n?.label})');
-}
-```
-
-Runnable: `dart run example/bin/allusers.dart`
-
-3) Users of a group (by group ID)
-
-```dart
-final res = pq.match('group-[:MEMBER_OF]<-user', startId: 'g_admins');
-print(res['user']); // Set of user IDs
-```
-
-Runnable: `dart run example/bin/group_users.dart g_admins` or by label `"Admins"`.
-
-4) Resources a person can access through their team
-
-```dart
-final res = pq.match(
-  'person-[:WORKS_FOR]->team-[:HAS_ACCESS]->resource',
-  startId: 'alice',
-);
-print(res['resource']); // Set of resource IDs
-```
-
-Runnable: `dart run example/bin/user_assets.dart u1`
-
-5) People who can work on a project (through team assignments)
-
-```dart
-final res = pq.match(
-  'project-[:ASSIGNED_TO]<-team-[:WORKS_FOR]<-person',
-  startId: 'web_app_project',
-);
-print(res['person']);
-```
-
-## Design and performance
+## 7. Design and performance
 
 - Traversal from a known ID (`startId`) is fast:
   - Each hop uses adjacency maps; cost is proportional to the edges visited.
 - Seeding by type (`alias:Type`) does a one-time node scan to find initial seeds.
   - For small/medium graphs, this is effectively instant; indexing can be added later if needed.
-- `matchMany([...])` mirrors “multiple MATCH/OPTIONAL MATCH” lines in Cypher by running several independent chains from the same start and unioning results.
+- `matchMany([...])` mirrors "multiple MATCH/OPTIONAL MATCH" lines in Cypher by running several independent chains from the same start and unioning results.
 
-## Row-wise pattern results (new)
-
-For cases where you need to know which variables co-occurred on the same matched path (e.g., which team gives access to which resource), use `matchRows()`:
-
-```dart
-final rows = pq.matchRows(
-  'person-[:WORKS_FOR]->team-[:HAS_ACCESS]->resource',
-  startId: 'alice',
-);
-// rows: [{person: alice, team: engineering, resource: database}, ...]
-
-// Build resource -> teams map from rows
-final resourceToTeams = <String, Set<String>>{};
-for (final r in rows) {
-  final resource = r['resource']!;
-  final team = r['team']!;
-  resourceToTeams.putIfAbsent(resource, () => <String>{}).add(team);
-}
-```
-
-You can union multiple chains while preserving row bindings with `matchRowsMany([...])`:
-
-```dart
-final rows = pq.matchRowsMany([
-  'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project-[:USES]->resource',
-  // If people can be assigned directly too:
-  'person-[:ASSIGNED_TO]->project-[:USES]->resource',
-], startId: 'alice');
-
-// Build resource -> projects mapping
-final resourceToProjects = <String, Set<String>>{};
-for (final r in rows) {
-  final resource = r['resource'];
-  final project = r['project'];
-  if (resource != null && project != null) {
-    resourceToProjects.putIfAbsent(resource, () => <String>{}).add(project);
-  }
-}
-```
-
-Notes:
-- The first segment supports optional `:Type` and `{label=...}`/`{label~...}` filters for seeding.
-- Intermediate segments currently match by structure (alias and edges); type/label filters may be added later if needed.
-
-## Complete path results with edges (v0.6.0+)
-
-For Neo4j-style path results that include both node mappings and complete edge information, use `matchPaths()`:
-
-```dart
-final paths = pq.matchPaths('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project');
-
-for (final path in paths) {
-  // Nodes: Map<String, String> - variable names to node IDs
-  print('Nodes: ${path.nodes}');
-
-  // Edges: List<PathEdge> - ordered connection details
-  for (final edge in path.edges) {
-    print('Edge: ${edge.from} -[:${edge.type}]-> ${edge.to}');
-    print('  Variables: ${edge.fromVariable} -> ${edge.toVariable}');
-  }
-  print('---');
-}
-```
-
-**Example output:**
-```
-Nodes: {person: alice, team: engineering, project: web_app}
-Edge: alice -[:WORKS_FOR]-> engineering
-  Variables: person -> team
-Edge: engineering -[:ASSIGNED_TO]-> web_app
-  Variables: team -> project
----
-Nodes: {person: alice, team: engineering, project: mobile_app}
-Edge: alice -[:WORKS_FOR]-> engineering
-  Variables: person -> team
-Edge: engineering -[:ASSIGNED_TO]-> mobile_app
-  Variables: team -> project
----
-```
-
-**Accessing PathEdge properties:**
-```dart
-final edge = path.edges.first;
-final fromNodeId = edge.from;          // 'alice'
-final toNodeId = edge.to;              // 'engineering'
-final edgeType = edge.type;            // 'WORKS_FOR'
-final fromVar = edge.fromVariable;     // 'person'
-final toVar = edge.toVariable;         // 'team'
-
-// Get actual node objects if needed
-final fromNode = graph.nodesById[fromNodeId];  // Node(id: 'alice', ...)
-final toNode = graph.nodesById[toNodeId];      // Node(id: 'engineering', ...)
-```
-
-Each `PathMatch` object contains:
-- **`nodes`**: Map of variable names to node IDs (same as `matchRows()`)
-- **`edges`**: Ordered list of `PathEdge` objects with complete connection details
-
-Each `PathEdge` provides:
-- **`from`/`to`**: Source and target node IDs
-- **`type`**: Edge type (e.g., 'WORKS_FOR', 'ASSIGNED_TO')
-- **`fromVariable`/`toVariable`**: Variable names from the pattern
-
-**Multiple pattern support:**
-```dart
-final paths = pq.matchPathsMany([
-  'person-[:LEADS]->project',
-  'person-[:WORKS_FOR]->team'
-], startId: 'alice');
-
-for (final path in paths) {
-  print('${path.nodes}');
-}
-```
-
-**Example output:**
-```
-{person: alice, project: web_app}
-{person: alice, team: engineering}
-```
-
-**Use cases:**
-- **Path visualization**: Show complete routes through your graph
-- **Audit trails**: Track exactly how entities are connected
-- **Neo4j migration**: Drop-in replacement for Neo4j path results
-- **Edge analysis**: Understand relationship types in your traversals
-
-## Generic traversal utilities (new)
-
-For BFS-style expansions and subgraph extraction with hop limits, use `expandSubgraph` from `traversal.dart`:
-
-```dart
-import 'package:graph_kit/graph_kit.dart';
-
-final seeds = {'u1'};
-final rightward = {'WORKS_FOR', 'ASSIGNED_TO', 'HAS_ACCESS'}; // your edge types
-
-final sub = expandSubgraph(
-  g,
-  seeds: seeds,
-  edgeTypesRightward: rightward,
-  forwardHops: 3,
-  backwardHops: 0,
-);
-
-print('Nodes: ' + sub.nodes.length.toString());
-print('Edges: ' + sub.edges.length.toString());
-```
-
-## JSON Serialization
+## 8. JSON Serialization
 
 Save and load graphs to/from JSON for persistence and data exchange:
 
@@ -473,11 +491,33 @@ final members = query.match('team<-[:MEMBER_OF]-user', startId: 'team1');
 print(members['user']); // {alice}
 ```
 
-## Examples index
+## 9. Examples index
 
-- `example/bin/allusers.dart` – list all users
-- `example/bin/group_users.dart` – users in a group (by ID or by label)
-- `example/bin/user_assets.dart` – assets a user can connect to
+### Dart CLI Examples
+- `bin/showcase.dart` – comprehensive graph demo with multiple query examples
+- `bin/access_control.dart` – access control patterns with users, groups, and resources
+- `bin/project_dependencies.dart` – project dependency analysis and traversal
+- `bin/social_network.dart` – social network relationships and friend recommendations
+- `bin/serialization_demo.dart` – JSON serialization and persistence
+
+Run any example:
+```bash
+dart run bin/showcase.dart
+dart run bin/access_control.dart
+```
+
+### Flutter Example App
+Interactive graph visualization with pattern queries:
+
+```bash
+cd example
+flutter run
+# Features:
+# - Visual graph with nodes and edges
+# - Live pattern query execution
+# - Path highlighting and visualization
+# - Example queries with one-click execution
+```
 
 ## License
 
