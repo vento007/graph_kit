@@ -578,8 +578,9 @@ void main() {
       // Add various edge types with different patterns
       for (int i = 0; i < 20; i++) {
         if (i > 0) graph.addEdge('node$i', 'PREV', 'node${i - 1}');
-        if (i % 3 == 0 && i > 0)
+        if (i % 3 == 0 && i > 0) {
           graph.addEdge('node$i', 'MULTIPLE', 'node${i ~/ 3}');
+        }
         if (i % 7 == 0) graph.addEdge('node$i', 'SPECIAL', 'node0');
       }
 
