@@ -110,7 +110,9 @@ EdgeExpansion _expand<N extends Node>(
           : g.outNeighbors(cur.id, et);
       for (final nb in neighbors) {
         // Record the actual directed edge with proper orientation
-        final e = inbound ? EdgeTriple(nb, et, cur.id) : EdgeTriple(cur.id, et, nb);
+        final e = inbound
+            ? EdgeTriple(nb, et, cur.id)
+            : EdgeTriple(cur.id, et, nb);
         exp.edges.add(e);
         if (!exp.dist.containsKey(nb)) {
           exp.dist[nb] = cur.dist + 1;
@@ -130,7 +132,13 @@ EdgeExpansion expandForward<N extends Node>(
   required Set<String> edgeTypes,
   int maxHops = 2,
 }) {
-  return _expand(g, seeds, edgeTypes: edgeTypes, maxHops: maxHops, inbound: false);
+  return _expand(
+    g,
+    seeds,
+    edgeTypes: edgeTypes,
+    maxHops: maxHops,
+    inbound: false,
+  );
 }
 
 /// Expand backward (leftward) from seeds for up to [maxHops] using [edgeTypes].
@@ -140,7 +148,13 @@ EdgeExpansion expandBackward<N extends Node>(
   required Set<String> edgeTypes,
   int maxHops = 1,
 }) {
-  return _expand(g, seeds, edgeTypes: edgeTypes, maxHops: maxHops, inbound: true);
+  return _expand(
+    g,
+    seeds,
+    edgeTypes: edgeTypes,
+    maxHops: maxHops,
+    inbound: true,
+  );
 }
 
 /// Builds a subgraph by expanding from seed nodes in both directions.
@@ -173,7 +187,7 @@ EdgeExpansion expandBackward<N extends Node>(
 ///   forwardHops: 2,
 ///   backwardHops: 1,
 /// );
-/// 
+///
 /// print('Nodes: ${result.nodes.length}');
 /// print('Edges: ${result.edges.length}');
 /// for (final edge in result.edges) {
@@ -202,11 +216,23 @@ SubgraphResult expandSubgraph<N extends Node>(
 
   // Optional pruning by masks.
   if (requireReachableFrom.isNotEmpty) {
-    final allowed = _expand(g, requireReachableFrom, edgeTypes: etR, maxHops: 32, inbound: false).nodes;
+    final allowed = _expand(
+      g,
+      requireReachableFrom,
+      edgeTypes: etR,
+      maxHops: 32,
+      inbound: false,
+    ).nodes;
     nodes.retainAll(allowed);
   }
   if (requireCanReach.isNotEmpty) {
-    final allowed = _expand(g, requireCanReach, edgeTypes: etL, maxHops: 32, inbound: true).nodes;
+    final allowed = _expand(
+      g,
+      requireCanReach,
+      edgeTypes: etL,
+      maxHops: 32,
+      inbound: true,
+    ).nodes;
     nodes.retainAll(allowed);
   }
 

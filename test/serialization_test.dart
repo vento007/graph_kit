@@ -35,13 +35,19 @@ void main() {
       expect(restoredGraph.nodesById['team1']?.label, equals('Engineering'));
 
       // Verify edges are preserved
-      expect(restoredGraph.outNeighbors('alice', 'MEMBER_OF'), contains('team1'));
+      expect(
+        restoredGraph.outNeighbors('alice', 'MEMBER_OF'),
+        contains('team1'),
+      );
       expect(restoredGraph.outNeighbors('bob', 'MEMBER_OF'), contains('team1'));
       expect(restoredGraph.outNeighbors('alice', 'MENTOR'), contains('bob'));
 
       // Verify pattern queries still work
       final query = PatternQuery(restoredGraph);
-      final teamMembers = query.match('team<-[:MEMBER_OF]-user', startId: 'team1');
+      final teamMembers = query.match(
+        'team<-[:MEMBER_OF]-user',
+        startId: 'team1',
+      );
       expect(teamMembers['user'], containsAll(['alice', 'bob']));
     });
 
@@ -49,28 +55,32 @@ void main() {
       final graph = Graph<Node>();
 
       // Add nodes with properties
-      graph.addNode(Node(
-        id: 'alice',
-        type: 'User',
-        label: 'Alice',
-        properties: {
-          'email': 'alice@example.com',
-          'age': 30,
-          'active': true,
-          'tags': ['engineer', 'team-lead'],
-        },
-      ));
+      graph.addNode(
+        Node(
+          id: 'alice',
+          type: 'User',
+          label: 'Alice',
+          properties: {
+            'email': 'alice@example.com',
+            'age': 30,
+            'active': true,
+            'tags': ['engineer', 'team-lead'],
+          },
+        ),
+      );
 
-      graph.addNode(Node(
-        id: 'project1',
-        type: 'Project',
-        label: 'Web App',
-        properties: {
-          'budget': 100000.50,
-          'deadline': '2024-12-31',
-          'priority': 'high',
-        },
-      ));
+      graph.addNode(
+        Node(
+          id: 'project1',
+          type: 'Project',
+          label: 'Web App',
+          properties: {
+            'budget': 100000.50,
+            'deadline': '2024-12-31',
+            'priority': 'high',
+          },
+        ),
+      );
 
       graph.addEdge('alice', 'ASSIGNED_TO', 'project1');
 
@@ -83,7 +93,10 @@ void main() {
       expect(aliceRestored.properties?['email'], equals('alice@example.com'));
       expect(aliceRestored.properties?['age'], equals(30));
       expect(aliceRestored.properties?['active'], equals(true));
-      expect(aliceRestored.properties?['tags'], equals(['engineer', 'team-lead']));
+      expect(
+        aliceRestored.properties?['tags'],
+        equals(['engineer', 'team-lead']),
+      );
 
       final projectRestored = restored.nodesById['project1']!;
       expect(projectRestored.properties?['budget'], equals(100000.50));
@@ -100,11 +113,17 @@ void main() {
       final jsonString = GraphSerializer.toJsonString(graph);
       expect(jsonString, isA<String>());
 
-      final prettyJsonString = GraphSerializer.toJsonString(graph, pretty: true);
+      final prettyJsonString = GraphSerializer.toJsonString(
+        graph,
+        pretty: true,
+      );
       expect(prettyJsonString.contains('\n'), isTrue); // Pretty formatting
 
       // Test JSON string deserialization
-      final restored = GraphSerializer.fromJsonString(jsonString, Node.fromJson);
+      final restored = GraphSerializer.fromJsonString(
+        jsonString,
+        Node.fromJson,
+      );
       expect(restored.nodesById['test']?.label, equals('Test Node'));
       expect(restored.outNeighbors('test', 'SELF_LOOP'), contains('test'));
     });
@@ -143,19 +162,21 @@ void main() {
 
       // Create a large graph (100 nodes, ~200 edges)
       for (int i = 0; i < 100; i++) {
-        graph.addNode(Node(
-          id: 'node$i',
-          type: 'TestNode',
-          label: 'Node $i',
-          properties: {'index': i, 'batch': i ~/ 10},
-        ));
+        graph.addNode(
+          Node(
+            id: 'node$i',
+            type: 'TestNode',
+            label: 'Node $i',
+            properties: {'index': i, 'batch': i ~/ 10},
+          ),
+        );
 
         // Connect to previous 2 nodes (creates a dense graph)
         if (i > 0) {
-          graph.addEdge('node$i', 'CONNECTS_TO', 'node${i-1}');
+          graph.addEdge('node$i', 'CONNECTS_TO', 'node${i - 1}');
         }
         if (i > 1) {
-          graph.addEdge('node$i', 'ALSO_CONNECTS', 'node${i-2}');
+          graph.addEdge('node$i', 'ALSO_CONNECTS', 'node${i - 2}');
         }
       }
 
@@ -170,17 +191,30 @@ void main() {
 
       // Verify correctness
       expect(restored.nodesById.length, equals(100));
-      expect(json['edges'], hasLength(197)); // 99 CONNECTS_TO + 98 ALSO_CONNECTS edges
+      expect(
+        json['edges'],
+        hasLength(197),
+      ); // 99 CONNECTS_TO + 98 ALSO_CONNECTS edges
 
       // Performance should be reasonable (adjust thresholds as needed)
       expect(serializeTime, lessThan(100), reason: 'Serialization too slow');
-      expect(deserializeTime, lessThan(100), reason: 'Deserialization too slow');
+      expect(
+        deserializeTime,
+        lessThan(100),
+        reason: 'Deserialization too slow',
+      );
 
       // Verify a few random nodes and edges
       expect(restored.nodesById['node42']?.label, equals('Node 42'));
       expect(restored.nodesById['node42']?.properties?['index'], equals(42));
-      expect(restored.outNeighbors('node50', 'CONNECTS_TO'), contains('node49'));
-      expect(restored.outNeighbors('node50', 'ALSO_CONNECTS'), contains('node48'));
+      expect(
+        restored.outNeighbors('node50', 'CONNECTS_TO'),
+        contains('node49'),
+      );
+      expect(
+        restored.outNeighbors('node50', 'ALSO_CONNECTS'),
+        contains('node48'),
+      );
     });
   });
 
@@ -203,138 +237,224 @@ void main() {
 
     test('rejects malformed JSON structures', () {
       // Missing version
-      expect(() => GraphSerializer.validateJson({'nodes': [], 'edges': []}),
-        throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({'nodes': [], 'edges': []}),
+        throwsA(isA<FormatException>()),
+      );
 
       // Missing nodes
-      expect(() => GraphSerializer.validateJson({'version': '1.0', 'edges': []}),
-        throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({'version': '1.0', 'edges': []}),
+        throwsA(isA<FormatException>()),
+      );
 
       // Missing edges
-      expect(() => GraphSerializer.validateJson({'version': '1.0', 'nodes': []}),
-        throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({'version': '1.0', 'nodes': []}),
+        throwsA(isA<FormatException>()),
+      );
 
       // Nodes not a list
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0', 'nodes': 'not-a-list', 'edges': []
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': 'not-a-list',
+          'edges': [],
+        }),
+        throwsA(isA<FormatException>()),
+      );
 
       // Edges not a list
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0', 'nodes': [], 'edges': 'not-a-list'
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [],
+          'edges': 'not-a-list',
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('validates node structure', () {
       // Node missing id
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [{'type': 'Type', 'label': 'Label'}],
-        'edges': []
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'type': 'Type', 'label': 'Label'},
+          ],
+          'edges': [],
+        }),
+        throwsA(isA<FormatException>()),
+      );
 
       // Node with empty id
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [{'id': '', 'type': 'Type', 'label': 'Label'}],
-        'edges': []
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'id': '', 'type': 'Type', 'label': 'Label'},
+          ],
+          'edges': [],
+        }),
+        throwsA(isA<FormatException>()),
+      );
 
       // Duplicate node IDs
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [
-          {'id': 'same', 'type': 'Type', 'label': 'Label1'},
-          {'id': 'same', 'type': 'Type', 'label': 'Label2'},
-        ],
-        'edges': []
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'id': 'same', 'type': 'Type', 'label': 'Label1'},
+            {'id': 'same', 'type': 'Type', 'label': 'Label2'},
+          ],
+          'edges': [],
+        }),
+        throwsA(isA<FormatException>()),
+      );
 
       // Node missing type
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [{'id': 'test', 'label': 'Label'}],
-        'edges': []
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'id': 'test', 'label': 'Label'},
+          ],
+          'edges': [],
+        }),
+        throwsA(isA<FormatException>()),
+      );
 
       // Node missing label
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [{'id': 'test', 'type': 'Type'}],
-        'edges': []
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'id': 'test', 'type': 'Type'},
+          ],
+          'edges': [],
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('validates edge structure and references', () {
       // Edge missing src
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [{'id': 'a', 'type': 'Type', 'label': 'Label'}],
-        'edges': [{'type': 'EDGE', 'dst': 'a'}]
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'id': 'a', 'type': 'Type', 'label': 'Label'},
+          ],
+          'edges': [
+            {'type': 'EDGE', 'dst': 'a'},
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
 
       // Edge with empty src
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [{'id': 'a', 'type': 'Type', 'label': 'Label'}],
-        'edges': [{'src': '', 'type': 'EDGE', 'dst': 'a'}]
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'id': 'a', 'type': 'Type', 'label': 'Label'},
+          ],
+          'edges': [
+            {'src': '', 'type': 'EDGE', 'dst': 'a'},
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
 
       // Edge referencing non-existent source
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [{'id': 'a', 'type': 'Type', 'label': 'Label'}],
-        'edges': [{'src': 'nonexistent', 'type': 'EDGE', 'dst': 'a'}]
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'id': 'a', 'type': 'Type', 'label': 'Label'},
+          ],
+          'edges': [
+            {'src': 'nonexistent', 'type': 'EDGE', 'dst': 'a'},
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
 
       // Edge referencing non-existent destination
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [{'id': 'a', 'type': 'Type', 'label': 'Label'}],
-        'edges': [{'src': 'a', 'type': 'EDGE', 'dst': 'nonexistent'}]
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'id': 'a', 'type': 'Type', 'label': 'Label'},
+          ],
+          'edges': [
+            {'src': 'a', 'type': 'EDGE', 'dst': 'nonexistent'},
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
 
       // Edge missing type
-      expect(() => GraphSerializer.validateJson({
-        'version': '1.0',
-        'nodes': [{'id': 'a', 'type': 'Type', 'label': 'Label'}],
-        'edges': [{'src': 'a', 'dst': 'a'}]
-      }), throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.validateJson({
+          'version': '1.0',
+          'nodes': [
+            {'id': 'a', 'type': 'Type', 'label': 'Label'},
+          ],
+          'edges': [
+            {'src': 'a', 'dst': 'a'},
+          ],
+        }),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('handles version compatibility', () {
       final futureVersionJson = {
         'version': '2.0', // Future version
-        'nodes': [{'id': 'a', 'type': 'Type', 'label': 'Label'}],
+        'nodes': [
+          {'id': 'a', 'type': 'Type', 'label': 'Label'},
+        ],
         'edges': [],
       };
 
-      expect(() => GraphSerializer.fromJson(futureVersionJson, Node.fromJson),
-        throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.fromJson(futureVersionJson, Node.fromJson),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 
   group('Error Handling', () {
     test('handles corrupted JSON gracefully', () {
       // Invalid JSON string
-      expect(() => GraphSerializer.fromJsonString('invalid json', Node.fromJson),
-        throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.fromJsonString('invalid json', Node.fromJson),
+        throwsA(isA<FormatException>()),
+      );
 
       // Valid JSON but wrong structure
-      expect(() => GraphSerializer.fromJsonString('{"not": "graph"}', Node.fromJson),
-        throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.fromJsonString('{"not": "graph"}', Node.fromJson),
+        throwsA(isA<FormatException>()),
+      );
     });
 
     test('handles edge cases in deserialization', () {
       // Missing required node fields during deserialization
       final jsonWithBadNode = {
         'version': '1.0',
-        'nodes': [{'id': 'test'}], // Missing type and label
+        'nodes': [
+          {'id': 'test'},
+        ], // Missing type and label
         'edges': [],
       };
 
-      expect(() => GraphSerializer.fromJson(jsonWithBadNode, Node.fromJson),
-        throwsA(isA<TypeError>()));
+      expect(
+        () => GraphSerializer.fromJson(jsonWithBadNode, Node.fromJson),
+        throwsA(isA<TypeError>()),
+      );
     });
 
     test('preserves graph integrity on deserialization errors', () {
@@ -344,12 +464,18 @@ void main() {
       // This should not affect the existing graph
       final jsonWithInvalidEdge = {
         'version': '1.0',
-        'nodes': [{'id': 'test', 'type': 'Type', 'label': 'Test'}],
-        'edges': [{'src': 'test', 'type': 'EDGE', 'dst': 'missing'}],
+        'nodes': [
+          {'id': 'test', 'type': 'Type', 'label': 'Test'},
+        ],
+        'edges': [
+          {'src': 'test', 'type': 'EDGE', 'dst': 'missing'},
+        ],
       };
 
-      expect(() => GraphSerializer.fromJson(jsonWithInvalidEdge, Node.fromJson),
-        throwsA(isA<FormatException>()));
+      expect(
+        () => GraphSerializer.fromJson(jsonWithInvalidEdge, Node.fromJson),
+        throwsA(isA<FormatException>()),
+      );
 
       // Original graph should be unaffected
       expect(graph.nodesById['existing']?.label, equals('Existing'));
@@ -361,33 +487,44 @@ void main() {
       final graph = Graph<Node>();
 
       // Unicode in all fields
-      graph.addNode(Node(
-        id: '用户_123',
-        type: 'User类型',
-        label: 'Alice 🎉',
-        properties: {'描述': '这是一个测试', 'emoji': '🚀💯'},
-      ));
+      graph.addNode(
+        Node(
+          id: '用户_123',
+          type: 'User类型',
+          label: 'Alice 🎉',
+          properties: {'描述': '这是一个测试', 'emoji': '🚀💯'},
+        ),
+      );
 
-      graph.addNode(Node(
-        id: 'special[]{}()',
-        type: 'Type-with-dashes',
-        label: 'Label with "quotes" and symbols!@#\$%',
-      ));
+      graph.addNode(
+        Node(
+          id: 'special[]{}()',
+          type: 'Type-with-dashes',
+          label: 'Label with "quotes" and symbols!@#\$%',
+        ),
+      );
 
       graph.addEdge('用户_123', 'EDGE_WITH_UNICODE_中文', 'special[]{}()');
 
       // Serialize and deserialize
       final jsonString = GraphSerializer.toJsonString(graph);
-      final restored = GraphSerializer.fromJsonString(jsonString, Node.fromJson);
+      final restored = GraphSerializer.fromJsonString(
+        jsonString,
+        Node.fromJson,
+      );
 
       // Verify unicode preservation
       expect(restored.nodesById['用户_123']?.label, equals('Alice 🎉'));
       expect(restored.nodesById['用户_123']?.properties?['描述'], equals('这是一个测试'));
-      expect(restored.nodesById['special[]{}()']?.label,
-        equals('Label with "quotes" and symbols!@#\$%'));
+      expect(
+        restored.nodesById['special[]{}()']?.label,
+        equals('Label with "quotes" and symbols!@#\$%'),
+      );
 
-      expect(restored.outNeighbors('用户_123', 'EDGE_WITH_UNICODE_中文'),
-        contains('special[]{}()'));
+      expect(
+        restored.outNeighbors('用户_123', 'EDGE_WITH_UNICODE_中文'),
+        contains('special[]{}()'),
+      );
     });
 
     test('handles self-loops and cycles', () {
@@ -428,18 +565,21 @@ void main() {
 
       // Build complex graph
       for (int i = 0; i < 20; i++) {
-        graph.addNode(Node(
-          id: 'node$i',
-          type: 'Type${i % 3}',
-          label: 'Node $i',
-          properties: {'value': i * 10, 'group': i ~/ 5},
-        ));
+        graph.addNode(
+          Node(
+            id: 'node$i',
+            type: 'Type${i % 3}',
+            label: 'Node $i',
+            properties: {'value': i * 10, 'group': i ~/ 5},
+          ),
+        );
       }
 
       // Add various edge types with different patterns
       for (int i = 0; i < 20; i++) {
-        if (i > 0) graph.addEdge('node$i', 'PREV', 'node${i-1}');
-        if (i % 3 == 0 && i > 0) graph.addEdge('node$i', 'MULTIPLE', 'node${i~/3}');
+        if (i > 0) graph.addEdge('node$i', 'PREV', 'node${i - 1}');
+        if (i % 3 == 0 && i > 0)
+          graph.addEdge('node$i', 'MULTIPLE', 'node${i ~/ 3}');
         if (i % 7 == 0) graph.addEdge('node$i', 'SPECIAL', 'node0');
       }
 
@@ -456,15 +596,26 @@ void main() {
       expect(type0Nodes['node']!.length, greaterThan(0));
 
       // Multi-hop query
-      final multihop = query.match('start-[:PREV]->mid-[:PREV]->end', startId: 'node5');
+      final multihop = query.match(
+        'start-[:PREV]->mid-[:PREV]->end',
+        startId: 'node5',
+      );
       expect(multihop['end'], contains('node3'));
 
       // Subgraph expansion should work identically
-      final original = expandSubgraph(graph, seeds: {'node10'},
-        edgeTypesRightward: {'PREV', 'MULTIPLE'}, forwardHops: 3);
+      final original = expandSubgraph(
+        graph,
+        seeds: {'node10'},
+        edgeTypesRightward: {'PREV', 'MULTIPLE'},
+        forwardHops: 3,
+      );
 
-      final restoredExpansion = expandSubgraph(restored, seeds: {'node10'},
-        edgeTypesRightward: {'PREV', 'MULTIPLE'}, forwardHops: 3);
+      final restoredExpansion = expandSubgraph(
+        restored,
+        seeds: {'node10'},
+        edgeTypesRightward: {'PREV', 'MULTIPLE'},
+        forwardHops: 3,
+      );
 
       expect(restoredExpansion.nodes, equals(original.nodes));
       expect(restoredExpansion.edges.length, equals(original.edges.length));

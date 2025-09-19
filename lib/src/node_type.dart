@@ -18,10 +18,10 @@
 ///   static const group = NodeType('Group');
 ///   static const policy = NodeType('Policy');
 /// }
-/// 
+///
 /// // Use with typed extensions
 /// final userIds = query.findByTypeT(NodeTypes.user);
-/// 
+///
 /// // Still works in pattern strings
 /// final pattern = '${NodeTypes.user}:User-[:MEMBER_OF]->group';
 /// ```

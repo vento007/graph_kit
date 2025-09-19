@@ -69,11 +69,7 @@ class Node {
   ///
   /// Used for serialization to JSON format
   Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{
-      'id': id,
-      'type': type,
-      'label': label,
-    };
+    final json = <String, dynamic>{'id': id, 'type': type, 'label': label};
 
     if (properties != null && properties!.isNotEmpty) {
       json['properties'] = properties;

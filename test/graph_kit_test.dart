@@ -9,15 +9,15 @@ void main() {
     // Add nodes
     graph.addNode(Node(id: 'alice', type: 'User', label: 'Alice'));
     graph.addNode(Node(id: 'admins', type: 'Group', label: 'Administrators'));
-    
+
     // Add edge
     graph.addEdge('alice', 'MEMBER_OF', 'admins');
-    
+
     // Test basic operations
     expect(graph.nodesById.length, 2);
     expect(graph.hasEdge('alice', 'MEMBER_OF', 'admins'), isTrue);
     expect(graph.outNeighbors('alice', 'MEMBER_OF'), contains('admins'));
-    
+
     // Test pattern query
     final results = query.match('user-[:MEMBER_OF]->group', startId: 'alice');
     expect(results['user'], contains('alice'));
@@ -35,9 +35,15 @@ void main() {
       // Create test data: person -> team -> project structure
       graph.addNode(Node(id: 'alice', type: 'Person', label: 'Alice Cooper'));
       graph.addNode(Node(id: 'bob', type: 'Person', label: 'Bob Wilson'));
-      graph.addNode(Node(id: 'engineering', type: 'Team', label: 'Engineering'));
-      graph.addNode(Node(id: 'web_app', type: 'Project', label: 'Web Application'));
-      graph.addNode(Node(id: 'mobile_app', type: 'Project', label: 'Mobile App'));
+      graph.addNode(
+        Node(id: 'engineering', type: 'Team', label: 'Engineering'),
+      );
+      graph.addNode(
+        Node(id: 'web_app', type: 'Project', label: 'Web Application'),
+      );
+      graph.addNode(
+        Node(id: 'mobile_app', type: 'Project', label: 'Mobile App'),
+      );
 
       // Add edges
       graph.addEdge('alice', 'WORKS_FOR', 'engineering');
@@ -68,14 +74,20 @@ void main() {
     });
 
     test('matchPaths handles multi-hop paths correctly', () {
-      final paths = query.matchPaths('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project');
+      final paths = query.matchPaths(
+        'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+      );
 
       expect(paths.length, 4); // 2 people × 2 projects
 
-      final alicePaths = paths.where((p) => p.nodes['person'] == 'alice').toList();
+      final alicePaths = paths
+          .where((p) => p.nodes['person'] == 'alice')
+          .toList();
       expect(alicePaths.length, 2);
 
-      final pathToWebApp = alicePaths.firstWhere((p) => p.nodes['project'] == 'web_app');
+      final pathToWebApp = alicePaths.firstWhere(
+        (p) => p.nodes['project'] == 'web_app',
+      );
       expect(pathToWebApp.edges.length, 2);
 
       // First edge: alice WORKS_FOR engineering
@@ -114,14 +126,19 @@ void main() {
     });
 
     test('matchPaths with startId filters results correctly', () {
-      final paths = query.matchPaths('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project', startId: 'alice');
+      final paths = query.matchPaths(
+        'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+        startId: 'alice',
+      );
 
       expect(paths.length, 2); // alice connected to 2 projects
       expect(paths.every((p) => p.nodes['person'] == 'alice'), isTrue);
     });
 
     test('matchPaths returns empty list for non-matching patterns', () {
-      final paths = query.matchPaths('person-[:MANAGES]->team'); // No MANAGES edges
+      final paths = query.matchPaths(
+        'person-[:MANAGES]->team',
+      ); // No MANAGES edges
 
       expect(paths, isEmpty);
     });
@@ -162,7 +179,9 @@ void main() {
       query = PatternQuery(graph);
 
       graph.addNode(Node(id: 'alice', type: 'Person', label: 'Alice'));
-      graph.addNode(Node(id: 'engineering', type: 'Team', label: 'Engineering'));
+      graph.addNode(
+        Node(id: 'engineering', type: 'Team', label: 'Engineering'),
+      );
       graph.addNode(Node(id: 'web_app', type: 'Project', label: 'Web App'));
 
       graph.addEdge('alice', 'WORKS_FOR', 'engineering');
@@ -205,9 +224,15 @@ void main() {
       // Create test data similar to demo app
       graph.addNode(Node(id: 'alice', type: 'Person', label: 'Alice Cooper'));
       graph.addNode(Node(id: 'bob', type: 'Person', label: 'Bob Wilson'));
-      graph.addNode(Node(id: 'charlie', type: 'Person', label: 'Charlie Davis'));
-      graph.addNode(Node(id: 'engineering', type: 'Team', label: 'Engineering'));
-      graph.addNode(Node(id: 'web_app', type: 'Project', label: 'Web Application'));
+      graph.addNode(
+        Node(id: 'charlie', type: 'Person', label: 'Charlie Davis'),
+      );
+      graph.addNode(
+        Node(id: 'engineering', type: 'Team', label: 'Engineering'),
+      );
+      graph.addNode(
+        Node(id: 'web_app', type: 'Project', label: 'Web Application'),
+      );
 
       // Only Alice leads a project
       graph.addEdge('alice', 'LEADS', 'web_app');
@@ -232,8 +257,12 @@ void main() {
     });
 
     test('match() should be consistent with matchPaths() results', () {
-      final matchResults = query.match('person:Person-[:LEADS]->project:Project');
-      final pathResults = query.matchPaths('person:Person-[:LEADS]->project:Project');
+      final matchResults = query.match(
+        'person:Person-[:LEADS]->project:Project',
+      );
+      final pathResults = query.matchPaths(
+        'person:Person-[:LEADS]->project:Project',
+      );
 
       // Extract nodes from paths for comparison
       final pathNodes = <String, Set<String>>{};

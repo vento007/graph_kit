@@ -18,10 +18,10 @@
 ///   static const hasClient = EdgeType('HAS_CLIENT');
 ///   static const source = EdgeType('SOURCE');
 /// }
-/// 
+///
 /// // Use with typed extensions
 /// graph.addEdgeT('u1', EdgeTypes.memberOf, 'g1');
-/// 
+///
 /// // Still works in pattern strings
 /// final pattern = 'user-[:${EdgeTypes.memberOf}]->group';
 /// ```

@@ -58,10 +58,7 @@ class PathMatch {
   /// Ordered list of edges in the path
   final List<PathEdge> edges;
 
-  const PathMatch({
-    required this.nodes,
-    required this.edges,
-  });
+  const PathMatch({required this.nodes, required this.edges});
 
   @override
   String toString() => 'PathMatch(nodes: $nodes, edges: $edges)';
@@ -111,10 +108,10 @@ class PathMatch {
 /// ```dart
 /// // All users and their groups
 /// 'user:User-[:MEMBER_OF]->group'
-/// 
+///
 /// // Policies from a specific user
 /// 'user-[:MEMBER_OF]->group-[:SOURCE]->policy'
-/// 
+///
 /// // Users who can reach a specific destination (backward traversal)
 /// 'destination<-[:DESTINATION]-group<-[:MEMBER_OF]-user'
 /// ```
@@ -123,7 +120,7 @@ class PathMatch {
 /// ```dart
 /// final graph = Graph<Node>();
 /// // ... add nodes and edges ...
-/// 
+///
 /// final query = PatternQuery(graph);
 /// final results = query.match('user:User-[:MEMBER_OF]->group');
 /// print(results['user']);  // Set of user IDs
@@ -132,10 +129,10 @@ class PathMatch {
 class PatternQuery<N extends Node> {
   /// The graph to execute queries against.
   final Graph<N> graph;
-  
+
   /// Creates a new pattern query engine for the given [graph].
   PatternQuery(this.graph);
-  
+
   /// Executes a single pattern query and returns grouped results.
   ///
   /// Takes a pattern string and returns a map where keys are variable names
@@ -174,7 +171,7 @@ class PatternQuery<N extends Node> {
     }
     return results;
   }
-  
+
   /// Executes multiple patterns and unions the results by variable name.
   ///
   /// This method is equivalent to running multiple independent queries and
@@ -196,23 +193,23 @@ class PatternQuery<N extends Node> {
   ///   'user-[:MEMBER_OF]->group-[:SOURCE]->policy',
   ///   'user-[:MEMBER_OF]->group-[:DESTINATION]->asset',
   /// ], startId: 'u1');
-  /// 
+  ///
   /// // Results contain all related entities from the user
   /// print(results['client']); // All clients
-  /// print(results['group']);  // All groups  
+  /// print(results['group']);  // All groups
   /// print(results['policy']); // All policies
   /// print(results['asset']);  // All assets
   /// ```
   Map<String, Set<String>> matchMany(List<String> patterns, {String? startId}) {
     final combined = <String, Set<String>>{};
-    
+
     for (final pattern in patterns) {
       final results = match(pattern, startId: startId);
       for (final entry in results.entries) {
         combined.putIfAbsent(entry.key, () => {}).addAll(entry.value);
       }
     }
-    
+
     return combined;
   }
 
@@ -238,12 +235,12 @@ class PatternQuery<N extends Node> {
   ///   'user-[:MEMBER_OF]->group-[:SOURCE]->policy-[:DESTINATION]->asset',
   ///   startId: 'u1'
   /// );
-  /// 
+  ///
   /// // Each row shows a complete path:
   /// // [{user: u1, group: g1, policy: p1, asset: a1},
   /// //  {user: u1, group: g1, policy: p2, asset: a2},
   /// //  {user: u1, group: g2, policy: p3, asset: a3}]
-  /// 
+  ///
   /// // Build asset -> policies mapping from rows
   /// final assetToPolicies = <String, Set<String>>{};
   /// for (final row in rows) {
@@ -298,7 +295,9 @@ class PatternQuery<N extends Node> {
     List<Map<String, String>> currentRows = <Map<String, String>>[];
     final firstAlias = aliasOf(parts.first);
     if (startId != null) {
-      currentRows = <Map<String, String>>[{firstAlias: startId}];
+      currentRows = <Map<String, String>>[
+        {firstAlias: startId},
+      ];
     } else {
       // Parse optional type and label filter in first segment
       String descriptor = firstAlias; // e.g., user:User{label~Mark}
@@ -313,7 +312,9 @@ class PatternQuery<N extends Node> {
       final braceStart = descriptor.indexOf('{');
       if (braceStart != -1 && descriptor.endsWith('}')) {
         head = descriptor.substring(0, braceStart).trim();
-        final inside = descriptor.substring(braceStart + 1, descriptor.length - 1).trim();
+        final inside = descriptor
+            .substring(braceStart + 1, descriptor.length - 1)
+            .trim();
         final m = RegExp(r'^label\s*([=~])\s*(.+)$').firstMatch(inside);
         if (m != null) {
           labelOp = m.group(1);
@@ -384,9 +385,12 @@ class PatternQuery<N extends Node> {
 
     return currentRows;
   }
-  
+
   /// Execute multiple patterns and concatenate row results (deduplicated).
-  List<Map<String, String>> matchRowsMany(List<String> patterns, {String? startId}) {
+  List<Map<String, String>> matchRowsMany(
+    List<String> patterns, {
+    String? startId,
+  }) {
     final out = <Map<String, String>>[];
     final seen = <String>{};
     for (final p in patterns) {
@@ -524,26 +528,35 @@ class PatternQuery<N extends Node> {
       if (!row.containsKey(fromVar) || !row.containsKey(toVar)) continue;
 
       // Extract edge type from the pattern between parts
-      final edgeType = _extractEdgeTypeFromParts(fromPart, toPart, cleanPattern, isForward);
+      final edgeType = _extractEdgeTypeFromParts(
+        fromPart,
+        toPart,
+        cleanPattern,
+        isForward,
+      );
       if (edgeType == null) continue;
 
       // Create the edge based on direction
       if (isForward) {
-        edges.add(PathEdge(
-          from: row[fromVar]!,
-          to: row[toVar]!,
-          type: edgeType,
-          fromVariable: fromVar,
-          toVariable: toVar,
-        ));
+        edges.add(
+          PathEdge(
+            from: row[fromVar]!,
+            to: row[toVar]!,
+            type: edgeType,
+            fromVariable: fromVar,
+            toVariable: toVar,
+          ),
+        );
       } else {
-        edges.add(PathEdge(
-          from: row[toVar]!,
-          to: row[fromVar]!,
-          type: edgeType,
-          fromVariable: toVar,
-          toVariable: fromVar,
-        ));
+        edges.add(
+          PathEdge(
+            from: row[toVar]!,
+            to: row[fromVar]!,
+            type: edgeType,
+            fromVariable: toVar,
+            toVariable: fromVar,
+          ),
+        );
       }
     }
 
@@ -592,7 +605,12 @@ class PatternQuery<N extends Node> {
   }
 
   /// Extract edge type by finding the edge syntax between two parts
-  String? _extractEdgeTypeFromParts(String fromPart, String toPart, String fullPattern, bool isForward) {
+  String? _extractEdgeTypeFromParts(
+    String fromPart,
+    String toPart,
+    String fullPattern,
+    bool isForward,
+  ) {
     // For backward patterns, the edge info is in the toPart
     // For forward patterns, the edge info is in the fromPart (or between parts)
     String searchPart;
@@ -671,10 +689,17 @@ class PatternQuery<N extends Node> {
   /// final matchingIds = query.findByLabelContains('admin');
   /// // Finds 'Administrator', 'admin', 'Admins', etc.
   /// ```
-  Set<String> findByLabelContains(String contains, {bool caseInsensitive = true}) {
+  Set<String> findByLabelContains(
+    String contains, {
+    bool caseInsensitive = true,
+  }) {
     final needle = caseInsensitive ? contains.toLowerCase() : contains;
     return graph.nodesById.values
-        .where((n) => (caseInsensitive ? n.label.toLowerCase() : n.label).contains(needle))
+        .where(
+          (n) => (caseInsensitive ? n.label.toLowerCase() : n.label).contains(
+            needle,
+          ),
+        )
         .map((n) => n.id)
         .toSet();
   }
@@ -682,12 +707,14 @@ class PatternQuery<N extends Node> {
   /// Returns outbound neighbors from [srcId] via [edgeType].
   ///
   /// This is a convenience wrapper around `graph.outNeighbors()`.
-  Set<String> outFrom(String srcId, String edgeType) => graph.outNeighbors(srcId, edgeType);
+  Set<String> outFrom(String srcId, String edgeType) =>
+      graph.outNeighbors(srcId, edgeType);
 
   /// Returns inbound neighbors to [dstId] via [edgeType].
   ///
   /// This is a convenience wrapper around `graph.inNeighbors()`.
-  Set<String> inTo(String dstId, String edgeType) => graph.inNeighbors(dstId, edgeType);
+  Set<String> inTo(String dstId, String edgeType) =>
+      graph.inNeighbors(dstId, edgeType);
 
   /// Finds all destinations reachable via [edgeType] from any source in [srcIds].
   ///

@@ -1,4 +1,4 @@
-import 'package:graph_kit/graph_kit.dart';  
+import 'package:graph_kit/graph_kit.dart';
 
 // Define types at top level
 class EdgeTypes {
@@ -67,17 +67,17 @@ void _demoBasicOperations() {
   print('=========================\n');
 
   final graph = Graph<Node>();
-  
+
   print('1️⃣  Creating nodes and edges:');
   // Add nodes
   graph.addNode(Node(id: 'user1', type: 'User', label: 'Alice'));
   graph.addNode(Node(id: 'group1', type: 'Group', label: 'Developers'));
   graph.addNode(Node(id: 'resource1', type: 'Resource', label: 'Database'));
-  
+
   // Add edges
   graph.addEdge('user1', 'MEMBER_OF', 'group1');
   graph.addEdge('group1', 'CAN_ACCESS', 'resource1');
-  
+
   print('   ✓ Added 3 nodes and 2 edges');
   print('   ✓ Graph has ${graph.nodesById.length} nodes');
   print('');
@@ -85,10 +85,10 @@ void _demoBasicOperations() {
   print('2️⃣  Basic lookups:');
   final user = graph.nodesById['user1'];
   print('   • User: ${user?.label} (type: ${user?.type})');
-  
+
   final userGroups = graph.outNeighbors('user1', 'MEMBER_OF');
   print('   • User groups: $userGroups');
-  
+
   final hasAccess = graph.hasEdge('group1', 'CAN_ACCESS', 'resource1');
   print('   • Group can access resource: $hasAccess');
   print('');
@@ -97,7 +97,7 @@ void _demoBasicOperations() {
   print('   • Outgoing from user1: ${graph.out['user1']}');
   print('   • Incoming to group1: ${graph.inn['group1']}');
   print('');
-  
+
   _separator();
 }
 
@@ -117,7 +117,7 @@ void _demoPatternQueries() {
   print('2️⃣  Traversal patterns:');
   final userAccess = query.match(
     'user-[:MEMBER_OF]->group-[:CAN_ACCESS]->resource',
-    startId: 'alice'
+    startId: 'alice',
   );
   print('   Pattern: "user-[:MEMBER_OF]->group-[:CAN_ACCESS]->resource"');
   print('   Starting from: alice');
@@ -130,7 +130,7 @@ void _demoPatternQueries() {
     'user-[:HAS_SKILL]->skill',
     'user-[:WORKS_IN]->location',
   ], startId: 'alice');
-  
+
   print('   Multiple patterns from alice:');
   for (final entry in aliceNetwork.entries) {
     if (entry.value.isNotEmpty) {
@@ -142,7 +142,7 @@ void _demoPatternQueries() {
   print('4️⃣  Backward traversal:');
   final resourceUsers = query.match(
     'resource<-[:CAN_ACCESS]-group<-[:MEMBER_OF]-user',
-    startId: 'database'
+    startId: 'database',
   );
   print('   Pattern: "resource<-[:CAN_ACCESS]-group<-[:MEMBER_OF]-user"');
   print('   Users who can access database: ${resourceUsers['user']}');
@@ -165,10 +165,10 @@ void _demoRowResults() {
   final query = PatternQuery(graph);
 
   print('1️⃣  Row results vs grouped results:');
-  
+
   // Grouped results
   final grouped = query.match(
-    'user-[:MEMBER_OF]->group-[:CAN_ACCESS]->resource'
+    'user-[:MEMBER_OF]->group-[:CAN_ACCESS]->resource',
   );
   print('   Grouped results:');
   for (final entry in grouped.entries) {
@@ -178,7 +178,7 @@ void _demoRowResults() {
 
   // Row results
   final rows = query.matchRows(
-    'user-[:MEMBER_OF]->group-[:CAN_ACCESS]->resource'
+    'user-[:MEMBER_OF]->group-[:CAN_ACCESS]->resource',
   );
   print('   Row results (showing relationships):');
   for (final row in rows) {
@@ -196,7 +196,7 @@ void _demoRowResults() {
     final resource = row['resource']!;
     userToResources.putIfAbsent(user, () => {}).add(resource);
   }
-  
+
   print('   User → Resources mapping:');
   for (final entry in userToResources.entries) {
     final userName = graph.nodesById[entry.key]?.label;
@@ -223,7 +223,7 @@ void _demoSubgraphTraversal() {
     edgeTypesRightward: {'MEMBER_OF', 'CAN_ACCESS', 'HAS_SKILL'},
     forwardHops: 2,
   );
-  
+
   print('   Starting from alice, 2 hops forward:');
   print('   • Nodes found: ${forward.nodes.length}');
   print('   • Edges traversed: ${forward.edges.length}');
@@ -239,7 +239,7 @@ void _demoSubgraphTraversal() {
     forwardHops: 1,
     backwardHops: 1,
   );
-  
+
   print('   Starting from developers group:');
   print('   • Total nodes: ${bidirectional.nodes.length}');
   print('   • Forward reach: ${bidirectional.forwardDist}');
@@ -266,17 +266,17 @@ void _demoTypedOperations() {
   final query = PatternQuery(graph);
 
   print('1️⃣  Using typed edge operations:');
-  
+
   // Add nodes
   graph.addNode(Node(id: 'alice', type: 'User', label: 'Alice'));
   graph.addNode(Node(id: 'devs', type: 'Group', label: 'Developers'));
-  
+
   // Type-safe edge operations
   graph.addEdgeT('alice', EdgeTypes.memberOf, 'devs');
-  
+
   final aliceGroups = graph.outNeighborsT('alice', EdgeTypes.memberOf);
   final hasEdge = graph.hasEdgeT('alice', EdgeTypes.memberOf, 'devs');
-  
+
   print('   ✓ Added typed edge: alice -[MEMBER_OF]-> devs');
   print('   ✓ Alice\'s groups: $aliceGroups');
   print('   ✓ Has membership edge: $hasEdge');
@@ -285,7 +285,7 @@ void _demoTypedOperations() {
   print('2️⃣  Type-safe queries:');
   final users = query.findByTypeT(NodeTypes.user);
   print('   ✓ Found users with typed query: $users');
-  
+
   final neighbors = query.outFromT('alice', EdgeTypes.memberOf);
   print('   ✓ Alice\'s typed neighbors: $neighbors');
   print('');

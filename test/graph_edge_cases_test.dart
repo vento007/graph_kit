@@ -10,12 +10,24 @@ void main() {
 
       // Unicode characters in IDs and labels
       graph.addNode(Node(id: '用户_123', type: 'User', label: 'Alice 🎉'));
-      graph.addNode(Node(id: 'group-with-dashes', type: 'Group', label: 'Team #1 & 2'));
-      graph.addNode(Node(id: 'node.with.dots', type: 'Resource', label: 'File: "config.json"'));
+      graph.addNode(
+        Node(id: 'group-with-dashes', type: 'Group', label: 'Team #1 & 2'),
+      );
+      graph.addNode(
+        Node(
+          id: 'node.with.dots',
+          type: 'Resource',
+          label: 'File: "config.json"',
+        ),
+      );
 
       // Special characters that might conflict with pattern syntax
-      graph.addNode(Node(id: 'weird[]{}()', type: 'Special', label: 'Contains: []{}()'));
-      graph.addNode(Node(id: 'arrows-><-', type: 'Arrows', label: 'Has -> and <-'));
+      graph.addNode(
+        Node(id: 'weird[]{}()', type: 'Special', label: 'Contains: []{}()'),
+      );
+      graph.addNode(
+        Node(id: 'arrows-><-', type: 'Arrows', label: 'Has -> and <-'),
+      );
 
       // Edge types with special characters
       graph.addEdge('用户_123', 'MEMBER_OF', 'group-with-dashes');
@@ -26,7 +38,10 @@ void main() {
       expect(graph.nodesById['用户_123']?.label, equals('Alice 🎉'));
 
       // Pattern queries with unicode IDs
-      final result1 = query.match('user-[:MEMBER_OF]->group', startId: '用户_123');
+      final result1 = query.match(
+        'user-[:MEMBER_OF]->group',
+        startId: '用户_123',
+      );
       expect(result1['group'], contains('group-with-dashes'));
 
       // Type filtering should work with special characters
@@ -50,8 +65,10 @@ void main() {
       // Should handle long strings without issues
       expect(graph.nodesById[longId]?.type, equals(longType));
 
-      final result = query.match('long-[:${'VERY_LONG_EDGE_TYPE_NAME' * 5}]->normal',
-        startId: longId);
+      final result = query.match(
+        'long-[:${'VERY_LONG_EDGE_TYPE_NAME' * 5}]->normal',
+        startId: longId,
+      );
       expect(result['normal'], contains('normal'));
     });
 
@@ -60,20 +77,35 @@ void main() {
       final query = PatternQuery(graph);
 
       // Empty strings (should be handled gracefully)
-      expect(() => graph.addNode(Node(id: '', type: 'User', label: 'Empty ID')),
-        returnsNormally);
-      expect(() => graph.addNode(Node(id: 'user', type: '', label: 'Empty Type')),
-        returnsNormally);
-      expect(() => graph.addNode(Node(id: 'user2', type: 'User', label: '')),
-        returnsNormally);
+      expect(
+        () => graph.addNode(Node(id: '', type: 'User', label: 'Empty ID')),
+        returnsNormally,
+      );
+      expect(
+        () => graph.addNode(Node(id: 'user', type: '', label: 'Empty Type')),
+        returnsNormally,
+      );
+      expect(
+        () => graph.addNode(Node(id: 'user2', type: 'User', label: '')),
+        returnsNormally,
+      );
 
       // Whitespace-only strings
       graph.addNode(Node(id: '   ', type: '  ', label: '   '));
-      graph.addNode(Node(id: 'tab\t\tnode', type: 'Type\nWith\nNewlines', label: 'Label\r\nWith\r\nCRLF'));
+      graph.addNode(
+        Node(
+          id: 'tab\t\tnode',
+          type: 'Type\nWith\nNewlines',
+          label: 'Label\r\nWith\r\nCRLF',
+        ),
+      );
 
       // Patterns with whitespace should parse correctly
       // Should handle whitespace in patterns gracefully without crashing
-      expect(() => query.match('  user  :  User  ', startId: 'user'), returnsNormally);
+      expect(
+        () => query.match('  user  :  User  ', startId: 'user'),
+        returnsNormally,
+      );
     });
   });
 
@@ -98,8 +130,12 @@ void main() {
       expect(result['spoke'], hasLength(1000));
 
       // Subgraph expansion should limit properly
-      final expansion = expandSubgraph(graph, seeds: {'hub'},
-        edgeTypesRightward: {'CONNECTS_TO'}, forwardHops: 1);
+      final expansion = expandSubgraph(
+        graph,
+        seeds: {'hub'},
+        edgeTypesRightward: {'CONNECTS_TO'},
+        forwardHops: 1,
+      );
       expect(expansion.nodes, hasLength(1001)); // hub + 1000 spokes
     });
 
@@ -110,20 +146,31 @@ void main() {
       for (int i = 0; i < 1000; i++) {
         graph.addNode(Node(id: 'node_$i', type: 'Node', label: 'Node $i'));
         if (i > 0) {
-          graph.addEdge('node_${i-1}', 'NEXT', 'node_$i');
+          graph.addEdge('node_${i - 1}', 'NEXT', 'node_$i');
         }
       }
 
       // Deep expansion should work without stack overflow
-      final deepExpansion = expandSubgraph(graph, seeds: {'node_0'},
-        edgeTypesRightward: {'NEXT'}, forwardHops: 500);
+      final deepExpansion = expandSubgraph(
+        graph,
+        seeds: {'node_0'},
+        edgeTypesRightward: {'NEXT'},
+        forwardHops: 500,
+      );
       expect(deepExpansion.nodes, hasLength(501)); // node_0 through node_500
 
       // Very deep backward expansion
-      final backwardExpansion = expandSubgraph(graph, seeds: {'node_999'},
+      final backwardExpansion = expandSubgraph(
+        graph,
+        seeds: {'node_999'},
         edgeTypesRightward: {}, // No forward edges
-        edgeTypesLeftward: {'NEXT'}, backwardHops: 500);
-      expect(backwardExpansion.nodes, hasLength(501)); // node_499 through node_999
+        edgeTypesLeftward: {'NEXT'},
+        backwardHops: 500,
+      );
+      expect(
+        backwardExpansion.nodes,
+        hasLength(501),
+      ); // node_499 through node_999
     });
 
     test('complete graph (everyone connected to everyone)', () {
@@ -149,9 +196,16 @@ void main() {
       }
 
       // Expansion should handle exponential growth
-      final expansion = expandSubgraph(graph, seeds: {'n0'},
-        edgeTypesRightward: {'CONNECTS'}, forwardHops: 2);
-      expect(expansion.nodes, hasLength(nodeCount)); // Should reach all nodes in 2 hops
+      final expansion = expandSubgraph(
+        graph,
+        seeds: {'n0'},
+        edgeTypesRightward: {'CONNECTS'},
+        forwardHops: 2,
+      );
+      expect(
+        expansion.nodes,
+        hasLength(nodeCount),
+      ); // Should reach all nodes in 2 hops
     });
   });
 
@@ -166,17 +220,20 @@ void main() {
 
       // Patterns with various whitespace should all work
       final patterns = [
-        'user-[:MEMBER_OF]->team',           // Normal
+        'user-[:MEMBER_OF]->team', // Normal
         '  user  -  [ : MEMBER_OF ] ->  team  ', // Lots of spaces
-        'user-[:MEMBER_OF]->team',           // No spaces
+        'user-[:MEMBER_OF]->team', // No spaces
         '\tuser\t-\t[:\tMEMBER_OF\t]\t->\tteam\t', // Tabs
         '\nuser\n-\n[:\nMEMBER_OF\n]\n->\nteam\n', // Newlines
       ];
 
       for (final pattern in patterns) {
         final result = query.match(pattern, startId: 'alice');
-        expect(result['team'], contains('team1'),
-          reason: 'Pattern failed: "$pattern"');
+        expect(
+          result['team'],
+          contains('team1'),
+          reason: 'Pattern failed: "$pattern"',
+        );
       }
     });
 
@@ -191,8 +248,10 @@ void main() {
       graph.addEdge('team1', 'WORKS_ON', 'project1');
 
       // Pattern with duplicate variable name "user"
-      final result = query.match('user-[:MEMBER_OF]->team-[:WORKS_ON]->user',
-        startId: 'alice');
+      final result = query.match(
+        'user-[:MEMBER_OF]->team-[:WORKS_ON]->user',
+        startId: 'alice',
+      );
 
       // Should use the last occurrence of "user" variable
       expect(result['user'], contains('project1'));
@@ -262,19 +321,34 @@ void main() {
       graph.addEdge('b', 'NEXT', 'c');
 
       // Zero hops should just return the seed
-      final expansion0 = expandSubgraph(graph, seeds: {'a'},
-        edgeTypesRightward: {'NEXT'}, forwardHops: 0);
+      final expansion0 = expandSubgraph(
+        graph,
+        seeds: {'a'},
+        edgeTypesRightward: {'NEXT'},
+        forwardHops: 0,
+      );
       expect(expansion0.nodes, equals({'a'}));
       expect(expansion0.edges, isEmpty);
 
       // Extremely large hop count should not cause issues
-      final expansionHuge = expandSubgraph(graph, seeds: {'a'},
-        edgeTypesRightward: {'NEXT'}, forwardHops: 1000000);
-      expect(expansionHuge.nodes, equals({'a', 'b', 'c'})); // Can't go beyond graph
+      final expansionHuge = expandSubgraph(
+        graph,
+        seeds: {'a'},
+        edgeTypesRightward: {'NEXT'},
+        forwardHops: 1000000,
+      );
+      expect(
+        expansionHuge.nodes,
+        equals({'a', 'b', 'c'}),
+      ); // Can't go beyond graph
 
       // Negative hop count should be treated as 0 or handled gracefully
-      final expansionNegative = expandSubgraph(graph, seeds: {'a'},
-        edgeTypesRightward: {'NEXT'}, forwardHops: -5);
+      final expansionNegative = expandSubgraph(
+        graph,
+        seeds: {'a'},
+        edgeTypesRightward: {'NEXT'},
+        forwardHops: -5,
+      );
       expect(expansionNegative.nodes, contains('a')); // At least the seed
     });
 
@@ -286,15 +360,24 @@ void main() {
       graph.addEdge('a', 'CONNECTS', 'b');
 
       // Empty edge type sets should return just the seeds
-      final expansion = expandSubgraph(graph, seeds: {'a'},
-        edgeTypesRightward: <String>{}, forwardHops: 5);
+      final expansion = expandSubgraph(
+        graph,
+        seeds: {'a'},
+        edgeTypesRightward: <String>{},
+        forwardHops: 5,
+      );
       expect(expansion.nodes, equals({'a'}));
       expect(expansion.edges, isEmpty);
 
       // Empty edge types in both directions
-      final expansion2 = expandSubgraph(graph, seeds: {'a'},
-        edgeTypesRightward: <String>{}, forwardHops: 2,
-        edgeTypesLeftward: <String>{}, backwardHops: 2);
+      final expansion2 = expandSubgraph(
+        graph,
+        seeds: {'a'},
+        edgeTypesRightward: <String>{},
+        forwardHops: 2,
+        edgeTypesLeftward: <String>{},
+        backwardHops: 2,
+      );
       expect(expansion2.nodes, equals({'a'}));
     });
   });
@@ -309,8 +392,16 @@ void main() {
 
       // Many different relationship types
       final edgeTypes = [
-        'FRIEND', 'COLLEAGUE', 'NEIGHBOR', 'MENTOR', 'STUDENT',
-        'COLLABORATOR', 'COMPETITOR', 'FAMILY', 'ACQUAINTANCE', 'ENEMY'
+        'FRIEND',
+        'COLLEAGUE',
+        'NEIGHBOR',
+        'MENTOR',
+        'STUDENT',
+        'COLLABORATOR',
+        'COMPETITOR',
+        'FAMILY',
+        'ACQUAINTANCE',
+        'ENEMY',
       ];
 
       for (final edgeType in edgeTypes) {
@@ -323,13 +414,20 @@ void main() {
         expect(graph.outNeighbors('alice', edgeType), contains('bob'));
         expect(graph.outNeighbors('bob', edgeType), contains('alice'));
 
-        final result = query.match('person-[:$edgeType]->other', startId: 'alice');
+        final result = query.match(
+          'person-[:$edgeType]->other',
+          startId: 'alice',
+        );
         expect(result['other'], contains('bob'));
       }
 
       // Mixed edge type expansion
-      final expansion = expandSubgraph(graph, seeds: {'alice'},
-        edgeTypesRightward: edgeTypes.take(5).toSet(), forwardHops: 1);
+      final expansion = expandSubgraph(
+        graph,
+        seeds: {'alice'},
+        edgeTypesRightward: edgeTypes.take(5).toSet(),
+        forwardHops: 1,
+      );
       expect(expansion.edges, hasLength(5)); // 5 different edge types to bob
     });
 
@@ -358,8 +456,12 @@ void main() {
       expect(toHub['leaf'], hasLength(100));
 
       // No leaf should reach other leaves directly (2-hop required through hub)
-      final leafToLeaf = expandSubgraph(graph, seeds: {'leaf0'},
-        edgeTypesRightward: {'REPORTS_TO', 'CONNECTS'}, forwardHops: 2);
+      final leafToLeaf = expandSubgraph(
+        graph,
+        seeds: {'leaf0'},
+        edgeTypesRightward: {'REPORTS_TO', 'CONNECTS'},
+        forwardHops: 2,
+      );
       expect(leafToLeaf.nodes, hasLength(101)); // leaf0 + hub + 99 other leaves
     });
   });
@@ -382,7 +484,10 @@ void main() {
       expect(graph.outNeighbors('alice', 'FRIEND'), contains('bob'));
 
       // Queries should still work
-      final result = query.match('admin:Admin-[:FRIEND]->user', startId: 'alice');
+      final result = query.match(
+        'admin:Admin-[:FRIEND]->user',
+        startId: 'alice',
+      );
       expect(result['user'], contains('bob'));
     });
 
@@ -393,12 +498,14 @@ void main() {
       for (int i = 0; i < 1000; i++) {
         graph.addNode(Node(id: 'user$i', type: 'User', label: 'User $i'));
         if (i > 0) {
-          graph.addEdge('user${i-1}', 'FOLLOWS', 'user$i');
+          graph.addEdge('user${i - 1}', 'FOLLOWS', 'user$i');
         }
 
         // Occasionally update existing nodes
         if (i % 10 == 0 && i > 0) {
-          graph.addNode(Node(id: 'user${i~/2}', type: 'UpdatedUser', label: 'Updated'));
+          graph.addNode(
+            Node(id: 'user${i ~/ 2}', type: 'UpdatedUser', label: 'Updated'),
+          );
         }
       }
 
@@ -412,7 +519,10 @@ void main() {
 
       expect(users['user'], isNotNull);
       expect(updatedUsers['user'], isNotNull);
-      expect(users['user']!.length + updatedUsers['user']!.length, equals(1000));
+      expect(
+        users['user']!.length + updatedUsers['user']!.length,
+        equals(1000),
+      );
     });
   });
 }

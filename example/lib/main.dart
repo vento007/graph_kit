@@ -54,28 +54,82 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     graph = Graph<Node>();
 
     // Add people
-    graph.addNode(Node(id: 'alice', type: 'Person', label: 'Alice Cooper',
-        properties: {'role': 'Developer', 'level': 'Senior'}));
-    graph.addNode(Node(id: 'bob', type: 'Person', label: 'Bob Wilson',
-        properties: {'role': 'Developer', 'level': 'Junior'}));
-    graph.addNode(Node(id: 'charlie', type: 'Person', label: 'Charlie Davis',
-        properties: {'role': 'Manager', 'level': 'Director'}));
+    graph.addNode(
+      Node(
+        id: 'alice',
+        type: 'Person',
+        label: 'Alice Cooper',
+        properties: {'role': 'Developer', 'level': 'Senior'},
+      ),
+    );
+    graph.addNode(
+      Node(
+        id: 'bob',
+        type: 'Person',
+        label: 'Bob Wilson',
+        properties: {'role': 'Developer', 'level': 'Junior'},
+      ),
+    );
+    graph.addNode(
+      Node(
+        id: 'charlie',
+        type: 'Person',
+        label: 'Charlie Davis',
+        properties: {'role': 'Manager', 'level': 'Director'},
+      ),
+    );
 
     // Add teams
-    graph.addNode(Node(id: 'engineering', type: 'Team', label: 'Engineering',
-        properties: {'size': 15, 'budget': 150000}));
-    graph.addNode(Node(id: 'design', type: 'Team', label: 'Design Team',
-        properties: {'size': 5, 'budget': 80000}));
-    graph.addNode(Node(id: 'marketing', type: 'Team', label: 'Marketing',
-        properties: {'size': 8, 'budget': 120000}));
+    graph.addNode(
+      Node(
+        id: 'engineering',
+        type: 'Team',
+        label: 'Engineering',
+        properties: {'size': 15, 'budget': 150000},
+      ),
+    );
+    graph.addNode(
+      Node(
+        id: 'design',
+        type: 'Team',
+        label: 'Design Team',
+        properties: {'size': 5, 'budget': 80000},
+      ),
+    );
+    graph.addNode(
+      Node(
+        id: 'marketing',
+        type: 'Team',
+        label: 'Marketing',
+        properties: {'size': 8, 'budget': 120000},
+      ),
+    );
 
     // Add projects
-    graph.addNode(Node(id: 'web_app', type: 'Project', label: 'Web Application',
-        properties: {'status': 'active', 'priority': 'high'}));
-    graph.addNode(Node(id: 'mobile_app', type: 'Project', label: 'Mobile App',
-        properties: {'status': 'planning', 'priority': 'medium'}));
-    graph.addNode(Node(id: 'campaign', type: 'Project', label: 'Ad Campaign',
-        properties: {'status': 'active', 'priority': 'high'}));
+    graph.addNode(
+      Node(
+        id: 'web_app',
+        type: 'Project',
+        label: 'Web Application',
+        properties: {'status': 'active', 'priority': 'high'},
+      ),
+    );
+    graph.addNode(
+      Node(
+        id: 'mobile_app',
+        type: 'Project',
+        label: 'Mobile App',
+        properties: {'status': 'planning', 'priority': 'medium'},
+      ),
+    );
+    graph.addNode(
+      Node(
+        id: 'campaign',
+        type: 'Project',
+        label: 'Ad Campaign',
+        properties: {'status': 'active', 'priority': 'high'},
+      ),
+    );
 
     // Add relationships
     graph.addEdge('alice', 'WORKS_FOR', 'engineering');
@@ -125,7 +179,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     } catch (e) {
       debugPrint('Query error: $e');
       setState(() {
-        queryResults = {'error': {'Query failed: $e'}};
+        queryResults = {
+          'error': {'Query failed: $e'},
+        };
         queryRows = null;
         queryPaths = null;
         _highlightEdgeTypes = const {};
@@ -153,9 +209,11 @@ class _GraphVisualizationState extends State<GraphVisualization> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
                 // Preset queries
-                const Text('Quick Queries:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  'Quick Queries:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -167,39 +225,86 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                     _buildQueryChip('All Projects', 'project:Project'),
 
                     // Full chain examples - these show complete paths!
-                    _buildQueryChip('🛤️ Work Chain', 'person:Person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project'),
-                    _buildQueryChip('🛤️ Management Chain', 'person:Person-[:MANAGES]->team-[:ASSIGNED_TO]->project'),
+                    _buildQueryChip(
+                      '🛤️ Work Chain',
+                      'person:Person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+                    ),
+                    _buildQueryChip(
+                      '🛤️ Management Chain',
+                      'person:Person-[:MANAGES]->team-[:ASSIGNED_TO]->project',
+                    ),
 
                     // Simple 2-hop chains
-                    _buildQueryChip('Who Works Where', 'person:Person-[:WORKS_FOR]->team'),
-                    _buildQueryChip('Team Projects', 'team:Team-[:ASSIGNED_TO]->project'),
-                    _buildQueryChip('Project Leaders', 'project:Project<-[:LEADS]-person'),
+                    _buildQueryChip(
+                      'Who Works Where',
+                      'person:Person-[:WORKS_FOR]->team',
+                    ),
+                    _buildQueryChip(
+                      'Team Projects',
+                      'team:Team-[:ASSIGNED_TO]->project',
+                    ),
+                    _buildQueryChip(
+                      'Project Leaders',
+                      'project:Project<-[:LEADS]-person',
+                    ),
 
                     // Filtered examples
-                    _buildQueryChip('Engineering Team', 'team:Team{label=Engineering}<-[:WORKS_FOR]-person'),
+                    _buildQueryChip(
+                      'Engineering Team',
+                      'team:Team{label=Engineering}<-[:WORKS_FOR]-person',
+                    ),
 
                     // StartId examples - specific starting points
                     const SizedBox(width: 16), // spacer
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.orange.shade100,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text('Specific Starting Points:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+                      child: Text(
+                        'Specific Starting Points:',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    _buildStartIdQueryChip('🎯 Alice\'s Path', 'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project', 'alice'),
-                    _buildStartIdQueryChip('🎯 Bob\'s Work Path', 'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project', 'bob'),
-                    _buildStartIdQueryChip('🎯 Charlie\'s Management', 'person-[:MANAGES]->team-[:ASSIGNED_TO]->project', 'charlie'),
-                    _buildStartIdQueryChip('🎯 Web App Team', 'project<-[:ASSIGNED_TO]-team<-[:WORKS_FOR]-person', 'web_app'),
+                    _buildStartIdQueryChip(
+                      '🎯 Alice\'s Path',
+                      'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+                      'alice',
+                    ),
+                    _buildStartIdQueryChip(
+                      '🎯 Bob\'s Work Path',
+                      'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+                      'bob',
+                    ),
+                    _buildStartIdQueryChip(
+                      '🎯 Charlie\'s Management',
+                      'person-[:MANAGES]->team-[:ASSIGNED_TO]->project',
+                      'charlie',
+                    ),
+                    _buildStartIdQueryChip(
+                      '🎯 Web App Team',
+                      'project<-[:ASSIGNED_TO]-team<-[:WORKS_FOR]-person',
+                      'web_app',
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
 
                 // Query results
                 if (queryResults != null) ...[
-                  const Text('Results:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Results:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: Container(
@@ -212,13 +317,20 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                       child: SingleChildScrollView(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: _getSortedResultEntries(queryResults!).map((entry) {
+                          children: _getSortedResultEntries(queryResults!).map((
+                            entry,
+                          ) {
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('${entry.key}:', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text(
+                                    '${entry.key}:',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                   ...entry.value.map((id) => Text('  • $id')),
                                 ],
                               ),
@@ -229,7 +341,10 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                     ),
                   ),
                 ] else if (queryRows != null) ...[
-                  const Text('Row Results (chains):', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Row Results (chains):',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: Container(
@@ -246,12 +361,21 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                             final pId = row['person'];
                             final tId = row['team'];
                             final prId = row['project'];
-                            final p = pId == null ? '' : (graph.nodesById[pId]?.label ?? pId);
-                            final t = tId == null ? '' : (graph.nodesById[tId]?.label ?? tId);
-                            final pr = prId == null ? '' : (graph.nodesById[prId]?.label ?? prId);
-                            final text = (pId != null && tId != null && prId != null)
+                            final p = pId == null
+                                ? ''
+                                : (graph.nodesById[pId]?.label ?? pId);
+                            final t = tId == null
+                                ? ''
+                                : (graph.nodesById[tId]?.label ?? tId);
+                            final pr = prId == null
+                                ? ''
+                                : (graph.nodesById[prId]?.label ?? prId);
+                            final text =
+                                (pId != null && tId != null && prId != null)
                                 ? '$p → $t → $pr'
-                                : row.entries.map((e) => '${e.key}=${e.value}').join('  ');
+                                : row.entries
+                                      .map((e) => '${e.key}=${e.value}')
+                                      .join('  ');
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 4),
                               child: Text('• $text'),
@@ -263,12 +387,14 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                   ),
                 ],
 
-
                 const SizedBox(height: 16),
 
                 // Node inspector
                 if (selectedNodeId != null) ...[
-                  const Text('Selected Node:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Selected Node:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   Container(
                     width: double.infinity,
@@ -291,7 +417,10 @@ class _GraphVisualizationState extends State<GraphVisualization> {
               children: [
                 // Query input field - moved from left panel
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -299,12 +428,19 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                           controller: _queryController,
                           maxLines: 2,
                           minLines: 1,
-                          style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                          ),
                           decoration: const InputDecoration(
-                            hintText: 'e.g., person:Person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+                            hintText:
+                                'e.g., person:Person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
                             hintStyle: TextStyle(fontSize: 11),
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 8,
+                            ),
                             isDense: true,
                           ),
                           onSubmitted: (_) => _executeQuery(),
@@ -342,7 +478,8 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                         graph: graph,
                         queryResults: queryResults,
                         selectedNodeId: selectedNodeId,
-                        onNodeTap: (nodeId) => setState(() => selectedNodeId = nodeId),
+                        onNodeTap: (nodeId) =>
+                            setState(() => selectedNodeId = nodeId),
                         highlightEdgeTypes: _highlightEdgeTypes,
                         highlightNodeIds: _highlightNodeIds,
                       ),
@@ -357,7 +494,10 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     children: [
-                      const Text('Graph Setup Code', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Graph Setup Code',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       const SizedBox(width: 8),
                       Switch(
                         value: _showCode,
@@ -368,7 +508,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                         tooltip: 'Copy to clipboard',
                         icon: const Icon(Icons.copy, size: 18),
                         onPressed: () async {
-                          await Clipboard.setData(ClipboardData(text: _graphSetupCode));
+                          await Clipboard.setData(
+                            ClipboardData(text: _graphSetupCode),
+                          );
                         },
                       ),
                     ],
@@ -405,15 +547,30 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                       children: [
                         Row(
                           children: [
-                            const Text('🛤️ Complete Paths', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            const Text(
+                              '🛤️ Complete Paths',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.blue.shade100,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: Text('${queryPaths!.length}', style: TextStyle(fontSize: 12, color: Colors.blue.shade800)),
+                              child: Text(
+                                '${queryPaths!.length}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue.shade800,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -494,8 +651,13 @@ class _GraphVisualizationState extends State<GraphVisualization> {
         Text('Label: ${node.label}'),
         if (node.properties != null) ...[
           const SizedBox(height: 4),
-          const Text('Properties:', style: TextStyle(fontWeight: FontWeight.bold)),
-          ...node.properties!.entries.map((e) => Text('  ${e.key}: ${e.value}')),
+          const Text(
+            'Properties:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          ...node.properties!.entries.map(
+            (e) => Text('  ${e.key}: ${e.value}'),
+          ),
         ],
       ],
     );
@@ -579,13 +741,15 @@ class _GraphVisualizationState extends State<GraphVisualization> {
         queryPaths = paths;
       });
     } catch (e) {
-       setState(() {
-         queryResults = {'error': {'Query failed: ${e.toString()}'}};
-         queryRows = null;
-         queryPaths = null;
-         _highlightEdgeTypes = const {};
-         _highlightNodeIds = const {};
-       });
+      setState(() {
+        queryResults = {
+          'error': {'Query failed: ${e.toString()}'},
+        };
+        queryRows = null;
+        queryPaths = null;
+        _highlightEdgeTypes = const {};
+        _highlightNodeIds = const {};
+      });
     }
   }
 
@@ -603,7 +767,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       final rows = startId != null
           ? query.matchRows(pattern, startId: startId)
           : query.matchRows(pattern);
-      debugPrint('Rows Query: $pattern, StartId: $startId, Rows: ${rows.length}');
+      debugPrint(
+        'Rows Query: $pattern, StartId: $startId, Rows: ${rows.length}',
+      );
       lastPattern = pattern;
       _highlightEdgeTypes = _extractEdgeTypes(pattern);
       // Build highlighted nodes from row results
@@ -621,7 +787,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     } catch (e) {
       debugPrint('Rows query error: $e');
       setState(() {
-        queryRows = [{'error': 'Query failed: $e'}];
+        queryRows = [
+          {'error': 'Query failed: $e'},
+        ];
         _highlightEdgeTypes = const {};
         _highlightNodeIds = const {};
       });
@@ -676,10 +844,19 @@ class _GraphVisualizationState extends State<GraphVisualization> {
   List<String> _orderPathVariables(List<String> variables, PathMatch path) {
     // Common ordering patterns
     final priority = {
-      'person': 0, 'user': 0, 'employee': 0, 'member': 0,
-      'team': 10, 'group': 10, 'department': 10,
-      'project': 20, 'task': 20, 'initiative': 20,
-      'resource': 30, 'asset': 30, 'database': 30,
+      'person': 0,
+      'user': 0,
+      'employee': 0,
+      'member': 0,
+      'team': 10,
+      'group': 10,
+      'department': 10,
+      'project': 20,
+      'task': 20,
+      'initiative': 20,
+      'resource': 30,
+      'asset': 30,
+      'database': 30,
     };
 
     variables.sort((a, b) {
@@ -725,7 +902,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       final props = (n.properties != null && n.properties!.isNotEmpty)
           ? ", properties: ${_formatMap(n.properties!)}"
           : '';
-      buf.writeln("graph.addNode(Node(id: '${_escapeSingleQuotes(n.id)}', type: '${_escapeSingleQuotes(n.type)}', label: '${_escapeSingleQuotes(n.label)}'$props));");
+      buf.writeln(
+        "graph.addNode(Node(id: '${_escapeSingleQuotes(n.id)}', type: '${_escapeSingleQuotes(n.type)}', label: '${_escapeSingleQuotes(n.label)}'$props));",
+      );
     }
 
     buf.writeln('');
@@ -737,7 +916,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       for (final t in types) {
         final dsts = graph.out[src]![t]!.toList()..sort();
         for (final dst in dsts) {
-          buf.writeln("graph.addEdge('${_escapeSingleQuotes(src)}', '${_escapeSingleQuotes(t)}', '${_escapeSingleQuotes(dst)}');");
+          buf.writeln(
+            "graph.addEdge('${_escapeSingleQuotes(src)}', '${_escapeSingleQuotes(t)}', '${_escapeSingleQuotes(dst)}');",
+          );
         }
       }
     }
@@ -746,7 +927,9 @@ class _GraphVisualizationState extends State<GraphVisualization> {
   }
 
   String _formatMap(Map<String, dynamic> map) {
-    final entries = map.entries.map((e) => "'${_escapeSingleQuotes(e.key)}': ${_formatValue(e.value)}").join(', ');
+    final entries = map.entries
+        .map((e) => "'${_escapeSingleQuotes(e.key)}': ${_formatValue(e.value)}")
+        .join(', ');
     return '{$entries}';
   }
 
@@ -759,7 +942,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     }
     if (v is Map) {
       final converted = <String, dynamic>{
-        for (final entry in v.entries) entry.key.toString(): entry.value
+        for (final entry in v.entries) entry.key.toString(): entry.value,
       };
       return _formatMap(converted);
     }
@@ -778,14 +961,20 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     return types;
   }
 
-  List<MapEntry<String, Set<String>>> _getSortedResultEntries(Map<String, Set<String>> results) {
+  List<MapEntry<String, Set<String>>> _getSortedResultEntries(
+    Map<String, Set<String>> results,
+  ) {
     // Define the desired order based on visual layout: Person -> Team -> Project
     final typeOrder = ['person', 'team', 'project'];
 
     final sortedEntries = results.entries.toList();
     sortedEntries.sort((a, b) {
-      final aIndex = typeOrder.indexWhere((type) => a.key.toLowerCase().contains(type));
-      final bIndex = typeOrder.indexWhere((type) => b.key.toLowerCase().contains(type));
+      final aIndex = typeOrder.indexWhere(
+        (type) => a.key.toLowerCase().contains(type),
+      );
+      final bIndex = typeOrder.indexWhere(
+        (type) => b.key.toLowerCase().contains(type),
+      );
 
       // If both found in typeOrder, sort by their index
       if (aIndex != -1 && bIndex != -1) {
@@ -876,11 +1065,13 @@ class GraphPainter extends CustomPainter {
           positions[sortedProjects[i]] = Offset(startX + 640.0, startY + 320.0);
         } else {
           // Fallback for other projects
-          positions[sortedProjects[i]] = Offset(startX + 640.0, startY + i * 140.0);
+          positions[sortedProjects[i]] = Offset(
+            startX + 640.0,
+            startY + i * 140.0,
+          );
         }
       }
     }
-
 
     return positions;
   }
@@ -918,16 +1109,21 @@ class GraphPainter extends CustomPainter {
 
           // Check if this edge is part of query results
           final isHighlighted = _isEdgeHighlighted(srcId, dstId, edgeType);
-          paint.color = isHighlighted ? Colors.red.shade700 : Colors.grey.shade600;
+          paint.color = isHighlighted
+              ? Colors.red.shade700
+              : Colors.grey.shade600;
           paint.strokeWidth = isHighlighted ? 4 : 2;
-
 
           // Draw arrow with smart routing
           final labelPos = _drawSmartArrow(canvas, srcPos, dstPos, paint);
 
           // Draw edge label at the calculated position
-          _drawTextWithBackground(canvas, edgeType, labelPos,
-              isHighlighted ? Colors.red.shade800 : Colors.grey.shade700);
+          _drawTextWithBackground(
+            canvas,
+            edgeType,
+            labelPos,
+            isHighlighted ? Colors.red.shade800 : Colors.grey.shade700,
+          );
         }
       }
     }
@@ -1061,8 +1257,10 @@ class GraphPainter extends CustomPainter {
     final lineLength = (lineEnd - lineStart).distance;
     if (lineLength == 0) return (point - lineStart).distance;
 
-    final t = ((point.dx - lineStart.dx) * (lineEnd.dx - lineStart.dx) +
-               (point.dy - lineStart.dy) * (lineEnd.dy - lineStart.dy)) / (lineLength * lineLength);
+    final t =
+        ((point.dx - lineStart.dx) * (lineEnd.dx - lineStart.dx) +
+            (point.dy - lineStart.dy) * (lineEnd.dy - lineStart.dy)) /
+        (lineLength * lineLength);
 
     final projection = lineStart + (lineEnd - lineStart) * t.clamp(0.0, 1.0);
     return (point - projection).distance;
@@ -1073,10 +1271,16 @@ class GraphPainter extends CustomPainter {
     if (lineLength == 0) return 0.0;
 
     return ((point.dx - lineStart.dx) * (lineEnd.dx - lineStart.dx) +
-            (point.dy - lineStart.dy) * (lineEnd.dy - lineStart.dy)) / (lineLength * lineLength);
+            (point.dy - lineStart.dy) * (lineEnd.dy - lineStart.dy)) /
+        (lineLength * lineLength);
   }
 
-  Offset _drawCurvedArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
+  Offset _drawCurvedArrow(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
     // Create a bezier curve that arcs around potential node overlaps
     final midX = (start.dx + end.dx) / 2;
     final midY = (start.dy + end.dy) / 2;
@@ -1119,9 +1323,14 @@ class GraphPainter extends CustomPainter {
 
     final path = Path()
       ..moveTo(start.dx, start.dy)
-      ..cubicTo(controlPoint1.dx, controlPoint1.dy,
-                controlPoint2.dx, controlPoint2.dy,
-                end.dx, end.dy);
+      ..cubicTo(
+        controlPoint1.dx,
+        controlPoint1.dy,
+        controlPoint2.dx,
+        controlPoint2.dy,
+        end.dx,
+        end.dy,
+      );
 
     canvas.drawPath(path, paint);
 
@@ -1141,7 +1350,12 @@ class GraphPainter extends CustomPainter {
     return labelPos;
   }
 
-  Offset _drawStraightArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
+  Offset _drawStraightArrow(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint,
+  ) {
     // Draw straight line
     canvas.drawLine(start, end, paint);
 
@@ -1155,19 +1369,28 @@ class GraphPainter extends CustomPainter {
     return midPoint + labelOffset;
   }
 
-  void _drawArrowhead(Canvas canvas, Offset position, Offset direction, Paint paint) {
+  void _drawArrowhead(
+    Canvas canvas,
+    Offset position,
+    Offset direction,
+    Paint paint,
+  ) {
     final arrowLength = 15.0;
     final arrowAngle = math.pi / 6;
 
-    final arrowPoint1 = position + Offset(
-      -arrowLength * math.cos(-arrowAngle + direction.angle),
-      -arrowLength * math.sin(-arrowAngle + direction.angle),
-    );
+    final arrowPoint1 =
+        position +
+        Offset(
+          -arrowLength * math.cos(-arrowAngle + direction.angle),
+          -arrowLength * math.sin(-arrowAngle + direction.angle),
+        );
 
-    final arrowPoint2 = position + Offset(
-      -arrowLength * math.cos(arrowAngle + direction.angle),
-      -arrowLength * math.sin(arrowAngle + direction.angle),
-    );
+    final arrowPoint2 =
+        position +
+        Offset(
+          -arrowLength * math.cos(arrowAngle + direction.angle),
+          -arrowLength * math.sin(arrowAngle + direction.angle),
+        );
 
     final arrowPath = Path()
       ..moveTo(position.dx, position.dy)
@@ -1185,15 +1408,27 @@ class GraphPainter extends CustomPainter {
     final textPainter = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w500),
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
       ),
       textDirection: TextDirection.ltr,
     );
     textPainter.layout();
-    textPainter.paint(canvas, position - Offset(textPainter.width / 2, textPainter.height / 2));
+    textPainter.paint(
+      canvas,
+      position - Offset(textPainter.width / 2, textPainter.height / 2),
+    );
   }
 
-  void _drawTextWithBackground(Canvas canvas, String text, Offset position, Color textColor) {
+  void _drawTextWithBackground(
+    Canvas canvas,
+    String text,
+    Offset position,
+    Color textColor,
+  ) {
     final textPainter = TextPainter(
       text: TextSpan(
         text: text,
@@ -1207,7 +1442,8 @@ class GraphPainter extends CustomPainter {
     );
     textPainter.layout();
 
-    final textOffset = position - Offset(textPainter.width / 2, textPainter.height / 2);
+    final textOffset =
+        position - Offset(textPainter.width / 2, textPainter.height / 2);
 
     // Draw background rectangle with more padding
     final backgroundRect = Rect.fromLTWH(
@@ -1255,9 +1491,9 @@ class GraphPainter extends CustomPainter {
   @override
   bool shouldRepaint(GraphPainter oldDelegate) {
     return oldDelegate.queryResults != queryResults ||
-           oldDelegate.selectedNodeId != selectedNodeId ||
-           !_setEqual(oldDelegate.highlightNodeIds, highlightNodeIds) ||
-           !_setEqual(oldDelegate.highlightEdgeTypes, highlightEdgeTypes);
+        oldDelegate.selectedNodeId != selectedNodeId ||
+        !_setEqual(oldDelegate.highlightNodeIds, highlightNodeIds) ||
+        !_setEqual(oldDelegate.highlightEdgeTypes, highlightEdgeTypes);
   }
 
   @override

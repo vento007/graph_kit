@@ -50,11 +50,7 @@ class GraphSerializer {
           final edgeKey = '$srcId->$edgeType->$dstId';
           if (!seenEdges.contains(edgeKey)) {
             seenEdges.add(edgeKey);
-            edges.add({
-              'src': srcId,
-              'type': edgeType,
-              'dst': dstId,
-            });
+            edges.add({'src': srcId, 'type': edgeType, 'dst': dstId});
           }
         }
       }
@@ -68,7 +64,7 @@ class GraphSerializer {
         'nodeCount': graph.nodesById.length,
         'edgeCount': edges.length,
         'serializedAt': DateTime.now().toIso8601String(),
-      }
+      },
     };
   }
 
@@ -115,10 +111,14 @@ class GraphSerializer {
 
         // Validate that referenced nodes exist
         if (!graph.nodesById.containsKey(src)) {
-          throw FormatException('Edge references non-existent source node: $src');
+          throw FormatException(
+            'Edge references non-existent source node: $src',
+          );
         }
         if (!graph.nodesById.containsKey(dst)) {
-          throw FormatException('Edge references non-existent destination node: $dst');
+          throw FormatException(
+            'Edge references non-existent destination node: $dst',
+          );
         }
 
         graph.addEdge(src, type, dst);
@@ -129,7 +129,10 @@ class GraphSerializer {
   }
 
   /// Convenience method to serialize graph directly to JSON string
-  static String toJsonString<N extends Node>(Graph<N> graph, {bool pretty = false}) {
+  static String toJsonString<N extends Node>(
+    Graph<N> graph, {
+    bool pretty = false,
+  }) {
     final json = toJson(graph);
     if (pretty) {
       const encoder = JsonEncoder.withIndent('  ');
@@ -223,7 +226,9 @@ class GraphSerializer {
         throw FormatException('Edge references non-existent source node: $src');
       }
       if (!nodeIds.contains(dst)) {
-        throw FormatException('Edge references non-existent destination node: $dst');
+        throw FormatException(
+          'Edge references non-existent destination node: $dst',
+        );
       }
     }
 
@@ -238,5 +243,5 @@ extension GraphSerialization<N extends Node> on Graph<N> {
 
   /// Serialize this graph to a JSON string
   String toJsonString({bool pretty = false}) =>
-    GraphSerializer.toJsonString(this, pretty: pretty);
+      GraphSerializer.toJsonString(this, pretty: pretty);
 }

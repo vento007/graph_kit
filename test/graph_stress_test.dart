@@ -21,8 +21,12 @@ void main() {
       expect(graph.hasEdge('a', 'EDGE', 'b'), isFalse);
 
       // Expansion on empty graph
-      final expansion = expandSubgraph(graph, seeds: {'fake'},
-        edgeTypesRightward: {'EDGE'}, forwardHops: 5);
+      final expansion = expandSubgraph(
+        graph,
+        seeds: {'fake'},
+        edgeTypesRightward: {'EDGE'},
+        forwardHops: 5,
+      );
       expect(expansion.nodes, isEmpty);
       expect(expansion.edges, isEmpty);
     });
@@ -39,7 +43,10 @@ void main() {
       expect(graph.inNeighbors('alice', 'MANAGES'), contains('alice'));
 
       // Pattern should handle self-loops
-      final result = query.match('person-[:MANAGES]->manager', startId: 'alice');
+      final result = query.match(
+        'person-[:MANAGES]->manager',
+        startId: 'alice',
+      );
       expect(result['person'], contains('alice'));
       expect(result['manager'], contains('alice'));
 
@@ -51,8 +58,10 @@ void main() {
       graph.addEdge('charlie', 'REPORTS_TO', 'alice'); // Circular reporting!
 
       // Should traverse the cycle
-      final cycle = query.match('person-[:REPORTS_TO]->boss-[:REPORTS_TO]->grandboss',
-        startId: 'alice');
+      final cycle = query.match(
+        'person-[:REPORTS_TO]->boss-[:REPORTS_TO]->grandboss',
+        startId: 'alice',
+      );
       expect(cycle['person'], contains('alice'));
       expect(cycle['boss'], contains('bob'));
       expect(cycle['grandboss'], contains('charlie'));
@@ -94,12 +103,20 @@ void main() {
       // 100 users, 10 teams, 5 departments, 1 company
       for (int i = 0; i < 100; i++) {
         graph.addNode(Node(id: 'user$i', type: 'User', label: 'User $i'));
-        graph.addNode(Node(id: 'team${i ~/ 10}', type: 'Team', label: 'Team ${i ~/ 10}'));
+        graph.addNode(
+          Node(id: 'team${i ~/ 10}', type: 'Team', label: 'Team ${i ~/ 10}'),
+        );
         graph.addEdge('user$i', 'MEMBER_OF', 'team${i ~/ 10}');
       }
 
       for (int i = 0; i < 10; i++) {
-        graph.addNode(Node(id: 'dept${i ~/ 2}', type: 'Department', label: 'Dept ${i ~/ 2}'));
+        graph.addNode(
+          Node(
+            id: 'dept${i ~/ 2}',
+            type: 'Department',
+            label: 'Dept ${i ~/ 2}',
+          ),
+        );
         graph.addEdge('team$i', 'PART_OF', 'dept${i ~/ 2}');
       }
 
@@ -115,21 +132,21 @@ void main() {
       // Deep traversal: user -> team -> dept -> company
       final userToCompany = query.match(
         'user-[:MEMBER_OF]->team-[:PART_OF]->dept-[:PART_OF]->company',
-        startId: 'user0'
+        startId: 'user0',
       );
       expect(userToCompany['company'], contains('company'));
 
       // Backward traversal: find all users in company
       final companyUsers = query.match(
         'company<-[:PART_OF]-dept<-[:PART_OF]-team<-[:MEMBER_OF]-user',
-        startId: 'company'
+        startId: 'company',
       );
       expect(companyUsers['user'], hasLength(100));
 
       // Row-wise results should preserve paths correctly
       final rows = query.matchRows(
         'user-[:MEMBER_OF]->team-[:PART_OF]->dept',
-        startId: 'user25' // User 25 is in team 2, dept 1
+        startId: 'user25', // User 25 is in team 2, dept 1
       );
       expect(rows, hasLength(1));
       expect(rows.first['user'], equals('user25'));
@@ -169,7 +186,9 @@ void main() {
       graph.addNode(Node(id: 'bob', type: 'User', label: 'Bob Manager'));
       graph.addNode(Node(id: 'charlie', type: 'User', label: 'Charlie Admin'));
       graph.addNode(Node(id: 'dave', type: 'User', label: 'Dave User'));
-      graph.addNode(Node(id: 'eve', type: 'User', label: 'Eve ADMIN')); // Different case
+      graph.addNode(
+        Node(id: 'eve', type: 'User', label: 'Eve ADMIN'),
+      ); // Different case
 
       // Exact match filtering
       final exactMatch = query.match('user:User{label=Alice Admin}');
@@ -186,7 +205,10 @@ void main() {
 
       // Non-matching substring
       final noMatch = query.match('user:User{label~xyz}');
-      expect(noMatch['user'], isNull); // Pattern matching returns null for empty results
+      expect(
+        noMatch['user'],
+        isNull,
+      ); // Pattern matching returns null for empty results
     });
 
     test('type filtering edge cases', () {
@@ -197,7 +219,9 @@ void main() {
       graph.addNode(Node(id: 'user1', type: 'User', label: 'User 1'));
       graph.addNode(Node(id: 'user2', type: 'UserProfile', label: 'Profile'));
       graph.addNode(Node(id: 'user3', type: 'SuperUser', label: 'Super'));
-      graph.addNode(Node(id: 'user4', type: 'user', label: 'Lowercase')); // Different case
+      graph.addNode(
+        Node(id: 'user4', type: 'user', label: 'Lowercase'),
+      ); // Different case
 
       // Exact type matching should be case-sensitive
       final users = query.match('item:User');
@@ -220,7 +244,10 @@ void main() {
       graph.addEdge('alice', 'MEMBER_OF', 'team1');
 
       // Variable names with special characters (within regex limits)
-      final result1 = query.match('user123-[:MEMBER_OF]->team456', startId: 'alice');
+      final result1 = query.match(
+        'user123-[:MEMBER_OF]->team456',
+        startId: 'alice',
+      );
       expect(result1['user123'], contains('alice'));
       expect(result1['team456'], contains('team1'));
 
@@ -230,8 +257,10 @@ void main() {
       expect(result2['t'], contains('team1'));
 
       // Long variable names
-      final result3 = query.match('veryLongUserVariableName-[:MEMBER_OF]->veryLongTeamVariableName',
-        startId: 'alice');
+      final result3 = query.match(
+        'veryLongUserVariableName-[:MEMBER_OF]->veryLongTeamVariableName',
+        startId: 'alice',
+      );
       expect(result3['veryLongUserVariableName'], contains('alice'));
       expect(result3['veryLongTeamVariableName'], contains('team1'));
     });
@@ -254,7 +283,7 @@ void main() {
       // Forward traversal through the entire chain
       final forward = query.match(
         'start-[:NEXT]->l1-[:NEXT]->l2-[:NEXT]->l3-[:NEXT]->l4-[:NEXT]->end',
-        startId: 'root'
+        startId: 'root',
       );
       expect(forward['start'], contains('root'));
       expect(forward['end'], contains('level5'));
@@ -262,7 +291,7 @@ void main() {
       // Backward traversal
       final backward = query.match(
         'end<-[:NEXT]-l4<-[:NEXT]-l3<-[:NEXT]-l2<-[:NEXT]-l1<-[:NEXT]-start',
-        startId: 'level5'
+        startId: 'level5',
       );
       expect(backward['start'], contains('root'));
       expect(backward['end'], contains('level5'));
@@ -288,29 +317,49 @@ void main() {
       for (int i = 0; i < 10; i++) {
         graph.addNode(Node(id: 'n$i', type: 'Node', label: 'Node $i'));
         if (i > 0) {
-          graph.addEdge('n${i-1}', 'NEXT', 'n$i');
+          graph.addEdge('n${i - 1}', 'NEXT', 'n$i');
         }
       }
 
       // Test different hop limits
-      final expansion0 = expandSubgraph(graph, seeds: {'n0'},
-        edgeTypesRightward: {'NEXT'}, forwardHops: 0);
+      final expansion0 = expandSubgraph(
+        graph,
+        seeds: {'n0'},
+        edgeTypesRightward: {'NEXT'},
+        forwardHops: 0,
+      );
       expect(expansion0.nodes, equals({'n0'}));
       expect(expansion0.edges, isEmpty);
 
-      final expansion1 = expandSubgraph(graph, seeds: {'n0'},
-        edgeTypesRightward: {'NEXT'}, forwardHops: 1);
+      final expansion1 = expandSubgraph(
+        graph,
+        seeds: {'n0'},
+        edgeTypesRightward: {'NEXT'},
+        forwardHops: 1,
+      );
       expect(expansion1.nodes, equals({'n0', 'n1'}));
       expect(expansion1.edges, hasLength(1));
 
-      final expansion5 = expandSubgraph(graph, seeds: {'n5'},
-        edgeTypesRightward: {'NEXT'}, forwardHops: 3,
-        edgeTypesLeftward: {'NEXT'}, backwardHops: 2);
-      expect(expansion5.nodes, containsAll(['n3', 'n4', 'n5', 'n6', 'n7', 'n8']));
+      final expansion5 = expandSubgraph(
+        graph,
+        seeds: {'n5'},
+        edgeTypesRightward: {'NEXT'},
+        forwardHops: 3,
+        edgeTypesLeftward: {'NEXT'},
+        backwardHops: 2,
+      );
+      expect(
+        expansion5.nodes,
+        containsAll(['n3', 'n4', 'n5', 'n6', 'n7', 'n8']),
+      );
 
       // Expansion beyond graph limits should not crash
-      final expansionHuge = expandSubgraph(graph, seeds: {'n0'},
-        edgeTypesRightward: {'NEXT'}, forwardHops: 100);
+      final expansionHuge = expandSubgraph(
+        graph,
+        seeds: {'n0'},
+        edgeTypesRightward: {'NEXT'},
+        forwardHops: 100,
+      );
       expect(expansionHuge.nodes, hasLength(10)); // All nodes
     });
 
@@ -333,8 +382,12 @@ void main() {
       graph.addEdge('b2', 'CONNECTS', 'b3');
 
       // Expansion from a1 should only reach component A
-      final expansionA = expandSubgraph(graph, seeds: {'a1'},
-        edgeTypesRightward: {'CONNECTS'}, forwardHops: 5);
+      final expansionA = expandSubgraph(
+        graph,
+        seeds: {'a1'},
+        edgeTypesRightward: {'CONNECTS'},
+        forwardHops: 5,
+      );
       expect(expansionA.nodes, equals({'a1', 'a2', 'a3'}));
       expect(expansionA.nodes, isNot(contains('b1')));
 
@@ -360,9 +413,14 @@ void main() {
       graph.addEdge('dev2', 'COLLABORATES_WITH', 'dev1');
 
       // Expansion with multiple edge types
-      final expansion = expandSubgraph(graph, seeds: {'ceo'},
-        edgeTypesRightward: {'COLLABORATES_WITH'}, forwardHops: 2,
-        edgeTypesLeftward: {'REPORTS_TO'}, backwardHops: 2);
+      final expansion = expandSubgraph(
+        graph,
+        seeds: {'ceo'},
+        edgeTypesRightward: {'COLLABORATES_WITH'},
+        forwardHops: 2,
+        edgeTypesLeftward: {'REPORTS_TO'},
+        backwardHops: 2,
+      );
 
       expect(expansion.nodes, containsAll(['ceo', 'cto', 'dev1', 'dev2']));
 
@@ -422,13 +480,18 @@ void main() {
       graph.addEdge('team1', 'ASSIGNED_TO', 'project1');
 
       // Multi-hop query should work
-      final multiHop = query.match('user-[:MEMBER_OF]->team-[:ASSIGNED_TO]->project',
-        startId: 'alice');
+      final multiHop = query.match(
+        'user-[:MEMBER_OF]->team-[:ASSIGNED_TO]->project',
+        startId: 'alice',
+      );
       expect(multiHop['project'], contains('project1'));
 
       // Update node label and verify it doesn't break structure
       graph.addNode(Node(id: 'alice', type: 'User', label: 'Alice Updated'));
-      final afterUpdate = query.match('user-[:MEMBER_OF]->team', startId: 'alice');
+      final afterUpdate = query.match(
+        'user-[:MEMBER_OF]->team',
+        startId: 'alice',
+      );
       expect(afterUpdate['team'], contains('team1'));
     });
   });
