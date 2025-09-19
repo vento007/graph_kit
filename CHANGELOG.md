@@ -1,3 +1,8 @@
+
+## 0.6.2+2
+
+• Fix: changed topics for package SEO
+
 ## 0.6.2+1
 
 • Fix: code formatting to meet pub.dev static analysis requirements
