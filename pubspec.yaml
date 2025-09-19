@@ -18,7 +18,7 @@ dev_dependencies:
 topics:
   - graph
   - graphs
-  - directed graph
+  - directed
   - cypher
   - multigraph
   
