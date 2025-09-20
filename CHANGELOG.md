@@ -1,4 +1,9 @@
 
+## 0.6.9
+
+### Added
+- Path enumeration utility to find all routes between nodes within hop limits
+
 ## 0.6.8
 
 ### Added
