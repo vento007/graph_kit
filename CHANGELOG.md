@@ -1,4 +1,11 @@
 
+## 0.6.7
+
+### Added
+- **New reachability methods** in GraphAlgorithms:
+  - `reachableBy()` - finds all nodes that can reach a target node (follows incoming edges)
+  - `reachableAll()` - finds all nodes connected bidirectionally (follows both incoming and outgoing edges)
+ 
 ## 0.6.6
 
 ### Added
