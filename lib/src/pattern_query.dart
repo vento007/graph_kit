@@ -256,26 +256,59 @@ class PatternQuery<N extends Node> {
       cleanPattern = cleanPattern.substring(6).trim();
     }
 
-    // Split by arrows while preserving direction metadata
+    // Empty or whitespace-only pattern -> no results
+    if (cleanPattern.isEmpty) return const <Map<String, String>>[];
+
+    // Malformed edge bracket usage: has '[' but no matching ']'
+    if (cleanPattern.contains('[') && !cleanPattern.contains(']')) {
+      return const <Map<String, String>>[];
+    }
+
+    // Split by arrows while preserving direction metadata, but ignore arrows inside []
     final parts = <String>[];
     final directions = <bool>[]; // true = forward (->), false = backward (<-)
 
-    var remaining = cleanPattern;
-    while (remaining.contains('->') || remaining.contains('<-')) {
-      final forwardIdx = remaining.indexOf('->');
-      final backwardIdx = remaining.indexOf('<-');
-
-      if (forwardIdx != -1 && (backwardIdx == -1 || forwardIdx < backwardIdx)) {
-        parts.add(remaining.substring(0, forwardIdx));
-        directions.add(true);
-        remaining = remaining.substring(forwardIdx + 2);
-      } else if (backwardIdx != -1) {
-        parts.add(remaining.substring(0, backwardIdx));
-        directions.add(false);
-        remaining = remaining.substring(backwardIdx + 2);
+    int i = 0;
+    int bracketDepth = 0; // depth in square brackets
+    int lastSplit = 0;
+    while (i < cleanPattern.length) {
+      final ch = cleanPattern[i];
+      if (ch == '[') {
+        bracketDepth++;
+        i++;
+        continue;
       }
+      if (ch == ']') {
+        bracketDepth = bracketDepth > 0 ? bracketDepth - 1 : -1;
+        if (bracketDepth < 0) {
+          // Unbalanced bracket -> malformed
+          return const <Map<String, String>>[];
+        }
+        i++;
+        continue;
+      }
+      if (bracketDepth == 0) {
+        // forward ->
+        if (ch == '-' && i + 1 < cleanPattern.length && cleanPattern[i + 1] == '>') {
+          parts.add(cleanPattern.substring(lastSplit, i));
+          directions.add(true);
+          i += 2;
+          lastSplit = i;
+          continue;
+        }
+        // backward <-
+        if (ch == '<' && i + 1 < cleanPattern.length && cleanPattern[i + 1] == '-') {
+          parts.add(cleanPattern.substring(lastSplit, i));
+          directions.add(false);
+          i += 2;
+          lastSplit = i;
+          continue;
+        }
+      }
+      i++;
     }
-    parts.add(remaining);
+    // final segment
+    parts.add(cleanPattern.substring(lastSplit));
 
     if (parts.isEmpty) return const <Map<String, String>>[];
 
@@ -294,6 +327,9 @@ class PatternQuery<N extends Node> {
     // Seed rows
     List<Map<String, String>> currentRows = <Map<String, String>>[];
     final firstAlias = aliasOf(parts.first);
+    if (firstAlias.isEmpty) {
+      return const <Map<String, String>>[];
+    }
     if (startId != null) {
       currentRows = <Map<String, String>>[
         {firstAlias: startId},
@@ -310,7 +346,11 @@ class PatternQuery<N extends Node> {
       descriptor = parts.first.split(RegExp(r'[-\[]')).first.trim();
       String head = descriptor;
       final braceStart = descriptor.indexOf('{');
-      if (braceStart != -1 && descriptor.endsWith('}')) {
+      if (braceStart != -1) {
+        if (!descriptor.endsWith('}')) {
+          // malformed label filter
+          return const <Map<String, String>>[];
+        }
         head = descriptor.substring(0, braceStart).trim();
         final inside = descriptor
             .substring(braceStart + 1, descriptor.length - 1)
@@ -319,12 +359,18 @@ class PatternQuery<N extends Node> {
         if (m != null) {
           labelOp = m.group(1);
           labelVal = m.group(2);
+          if (labelVal == null || labelVal.trim().isEmpty) {
+            return const <Map<String, String>>[];
+          }
+        } else if (inside.isNotEmpty) {
+          return const <Map<String, String>>[];
         }
       }
       if (head.contains(':')) {
         final typeParts = head.split(':');
         nodeType = typeParts.length > 1 ? typeParts[1].trim() : null;
       }
+
 
       // Seed by scanning nodes matching type/label
       for (final node in graph.nodesById.values) {
@@ -351,12 +397,13 @@ class PatternQuery<N extends Node> {
       // For backward patterns, edge info is in the next part
       final isForward = directions[i];
       final edgePart = isForward ? part : parts[i + 1];
-      final edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(edgePart);
-      if (edgeMatch == null) {
+      final edgeType = _edgeTypeFrom(edgePart);
+      if (edgeType == null) {
         // No edge specified; cannot advance
         return const <Map<String, String>>[];
       }
-      final edgeType = edgeMatch.group(1)!;
+      final edgeTypeTrimmed = edgeType.trim();
+      if (edgeTypeTrimmed.isEmpty) return const <Map<String, String>>[];
 
       final nextRows = <Map<String, String>>[];
       final seen = <String>{}; // dedupe identical rows
@@ -365,8 +412,8 @@ class PatternQuery<N extends Node> {
         final srcId = row[aliasHere];
         if (srcId == null) continue;
         final neighbors = isForward
-            ? graph.outNeighbors(srcId, edgeType)
-            : graph.inNeighbors(srcId, edgeType);
+            ? graph.outNeighbors(srcId, edgeTypeTrimmed)
+            : graph.inNeighbors(srcId, edgeTypeTrimmed);
         for (final nb in neighbors) {
           final newRow = Map<String, String>.from(row);
           newRow[nextAlias] = nb;
@@ -472,46 +519,50 @@ class PatternQuery<N extends Node> {
       cleanPattern = cleanPattern.substring(6).trim();
     }
 
-    // Parse the pattern to extract edge information
-    // Split by arrows to get segments
+    // Parse the pattern to extract edge information with bracket-aware splitting
     final parts = <String>[];
     final directions = <bool>[]; // true = forward (->), false = backward (<-)
 
-    var remaining = cleanPattern;
-    while (remaining.contains('->') || remaining.contains('<-')) {
-      final forwardIdx = remaining.indexOf('->');
-      final backwardIdx = remaining.indexOf('<-');
-
-      int splitIdx;
-      bool isForward;
-
-      if (forwardIdx == -1) {
-        splitIdx = backwardIdx;
-        isForward = false;
-      } else if (backwardIdx == -1) {
-        splitIdx = forwardIdx;
-        isForward = true;
-      } else {
-        if (forwardIdx < backwardIdx) {
-          splitIdx = forwardIdx;
-          isForward = true;
-        } else {
-          splitIdx = backwardIdx;
-          isForward = false;
+    int i = 0;
+    int bracketDepth = 0;
+    int lastSplit = 0;
+    while (i < cleanPattern.length) {
+      final ch = cleanPattern[i];
+      if (ch == '[') {
+        bracketDepth++;
+        i++;
+        continue;
+      }
+      if (ch == ']') {
+        bracketDepth = bracketDepth > 0 ? bracketDepth - 1 : -1;
+        if (bracketDepth < 0) {
+          // malformed
+          break;
+        }
+        i++;
+        continue;
+      }
+      if (bracketDepth == 0) {
+        if (ch == '-' && i + 1 < cleanPattern.length && cleanPattern[i + 1] == '>') {
+          parts.add(cleanPattern.substring(lastSplit, i).trim());
+          directions.add(true);
+          i += 2;
+          lastSplit = i;
+          continue;
+        }
+        if (ch == '<' && i + 1 < cleanPattern.length && cleanPattern[i + 1] == '-') {
+          parts.add(cleanPattern.substring(lastSplit, i).trim());
+          directions.add(false);
+          i += 2;
+          lastSplit = i;
+          continue;
         }
       }
-
-      // Extract part before arrow
-      parts.add(remaining.substring(0, splitIdx).trim());
-      directions.add(isForward);
-
-      // Move past the arrow
-      remaining = remaining.substring(splitIdx + 2).trim();
+      i++;
     }
-
-    // Add the final part
-    if (remaining.isNotEmpty) {
-      parts.add(remaining.trim());
+    if (lastSplit <= cleanPattern.length) {
+      final tail = cleanPattern.substring(lastSplit).trim();
+      if (tail.isNotEmpty) parts.add(tail);
     }
 
     // Build edges from the parsed parts
@@ -527,14 +578,10 @@ class PatternQuery<N extends Node> {
       if (fromVar == null || toVar == null) continue;
       if (!row.containsKey(fromVar) || !row.containsKey(toVar)) continue;
 
-      // Extract edge type from the pattern between parts
-      final edgeType = _extractEdgeTypeFromParts(
-        fromPart,
-        toPart,
-        cleanPattern,
-        isForward,
-      );
-      if (edgeType == null) continue;
+      // Extract edge type from the appropriate part (backward uses toPart)
+      final edgePart = isForward ? fromPart : toPart;
+      final edgeType = _edgeTypeFrom(edgePart)?.trim();
+      if (edgeType == null || edgeType.isEmpty) continue;
 
       // Create the edge based on direction
       if (isForward) {
@@ -604,37 +651,48 @@ class PatternQuery<N extends Node> {
     return varName.isEmpty ? null : varName;
   }
 
-  /// Extract edge type by finding the edge syntax between two parts
-  String? _extractEdgeTypeFromParts(
-    String fromPart,
-    String toPart,
-    String fullPattern,
-    bool isForward,
-  ) {
-    // For backward patterns, the edge info is in the toPart
-    // For forward patterns, the edge info is in the fromPart (or between parts)
-    String searchPart;
-    if (isForward) {
-      // Look in fromPart first, then between parts
-      var edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(fromPart);
-      if (edgeMatch != null) return edgeMatch.group(1);
+  /// Parse edge type from a segment containing an edge block like "[ : TYPE ]".
+  /// Supports nested square brackets inside TYPE and arbitrary characters.
+  String? _edgeTypeFrom(String segment) {
+    // Find '[' that begins an edge block
+    for (int i = 0; i < segment.length; i++) {
+      if (segment[i] == '[') {
+        // Scan to ':' before the matching ']' (allow whitespace)
+        int j = i + 1;
+        while (j < segment.length && segment[j].trim().isEmpty) j++;
+        bool foundColon = false;
+        while (j < segment.length) {
+          final c = segment[j];
+          if (c == ':') {
+            foundColon = true;
+            j++;
+            break;
+          }
+          if (c == ']') break;
+          j++;
+        }
+        if (!foundColon) continue; // not an edge block
 
-      // Look between parts as fallback
-      final fromEnd = fullPattern.indexOf(fromPart) + fromPart.length;
-      final toStart = fullPattern.indexOf(toPart, fromEnd);
-      if (fromEnd < toStart) {
-        final betweenParts = fullPattern.substring(fromEnd, toStart);
-        edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(betweenParts);
-        return edgeMatch?.group(1);
+        // Now scan to matching closing bracket with nesting
+        int depth = 1;
+        final contentStart = j;
+        int k = j;
+        while (k < segment.length) {
+          final c = segment[k];
+          if (c == '[') {
+            depth++;
+          } else if (c == ']') {
+            depth--;
+            if (depth == 0) {
+              return segment.substring(contentStart, k);
+            }
+          }
+          k++;
+        }
+        return null; // unbalanced
       }
-      return null;
-    } else {
-      // Backward pattern: edge info is in toPart like "[:LEADS]-person"
-      searchPart = toPart;
     }
-
-    final edgeMatch = RegExp(r'\[\s*:\s*(\w+)\s*\]').firstMatch(searchPart);
-    return edgeMatch?.group(1);
+    return null;
   }
 
   // --- Utility finder methods ---
