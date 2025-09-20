@@ -1603,7 +1603,9 @@ enum AlgorithmMode {
   reachability('Reachable From', 'See what nodes can be reached from a source'),
   reachableBy('Reachable By', 'See what nodes can reach a target'),
   reachableAll('Bidirectional Reach', 'See all nodes connected in either direction'),
-  topologicalSort('Topological Sort', 'Order nodes by dependencies');
+  topologicalSort('Topological Sort', 'Order nodes by dependencies'),
+  betweennessCentrality('Betweenness Centrality', 'Find critical bridge nodes'),
+  closenessCentrality('Closeness Centrality', 'Find nodes closest to all others');
 
   const AlgorithmMode(this.title, this.description);
   final String title;
@@ -1645,6 +1647,10 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
   // Topological sort state
   List<String>? sortedNodes;
 
+  // Centrality state
+  Map<String, double>? betweennessCentrality;
+  Map<String, double>? closenessCentrality;
+
   @override
   void initState() {
     super.initState();
@@ -1664,6 +1670,12 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
     graph.addNode(Node(id: 'tests', type: 'Package', label: 'Tests'));
     graph.addNode(Node(id: 'isolated', type: 'Package', label: 'Legacy'));
 
+    // Add bridge nodes to showcase betweenness centrality
+    graph.addNode(Node(id: 'auth', type: 'Service', label: 'Auth'));
+    graph.addNode(Node(id: 'teamA', type: 'Team', label: 'Team A'));
+    graph.addNode(Node(id: 'teamB', type: 'Team', label: 'Team B'));
+    graph.addNode(Node(id: 'teamC', type: 'Team', label: 'Team C'));
+
     // Add dependency edges (A DEPENDS_ON B means A needs B to be built first)
     graph.addEdge('utils', 'DEPENDS_ON', 'core');    // utils needs core
     graph.addEdge('db', 'DEPENDS_ON', 'core');       // database needs core
@@ -1674,6 +1686,25 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
     graph.addEdge('app', 'DEPENDS_ON', 'ui');        // app needs ui
     graph.addEdge('tests', 'DEPENDS_ON', 'app');     // tests need app
     // isolated has no dependencies (separate component)
+
+    // Create simple CONNECTS edges to form clear bridge patterns
+    // Auth acts as bridge between teams and core infrastructure
+    graph.addEdge('teamA', 'CONNECTS', 'auth');      // teamA <-> auth
+    graph.addEdge('auth', 'CONNECTS', 'teamA');
+    graph.addEdge('teamB', 'CONNECTS', 'auth');      // teamB <-> auth
+    graph.addEdge('auth', 'CONNECTS', 'teamB');
+    graph.addEdge('teamC', 'CONNECTS', 'auth');      // teamC <-> auth
+    graph.addEdge('auth', 'CONNECTS', 'teamC');
+    graph.addEdge('auth', 'CONNECTS', 'core');       // auth <-> core
+    graph.addEdge('core', 'CONNECTS', 'auth');
+
+    // Utils acts as bridge between teams and packages
+    graph.addEdge('auth', 'CONNECTS', 'utils');      // auth <-> utils
+    graph.addEdge('utils', 'CONNECTS', 'auth');
+    graph.addEdge('utils', 'CONNECTS', 'api');       // utils <-> api
+    graph.addEdge('api', 'CONNECTS', 'utils');
+    graph.addEdge('utils', 'CONNECTS', 'ui');        // utils <-> ui
+    graph.addEdge('ui', 'CONNECTS', 'utils');
 
     algorithms = GraphAlgorithms(graph);
     _updateResults();
@@ -1705,6 +1736,10 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
         } catch (e) {
           sortedNodes = null; // Graph has cycles
         }
+      case AlgorithmMode.betweennessCentrality:
+        betweennessCentrality = algorithms.betweennessCentrality();
+      case AlgorithmMode.closenessCentrality:
+        closenessCentrality = algorithms.closenessCentrality();
     }
   }
 
@@ -1802,6 +1837,8 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
                         reachableByNodes: reachableByNodes,
                         reachableAllNodes: reachableAllNodes,
                         sortedNodes: sortedNodes,
+                        betweennessCentrality: betweennessCentrality,
+                        closenessCentrality: closenessCentrality,
                         sourceNode: sourceNode,
                         destinationNode: destinationNode,
                         reachabilitySource: reachabilitySource,
@@ -1835,6 +1872,10 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
         return _buildReachableAllControls();
       case AlgorithmMode.topologicalSort:
         return _buildTopologicalSortControls();
+      case AlgorithmMode.betweennessCentrality:
+        return _buildBetweennessCentralityControls();
+      case AlgorithmMode.closenessCentrality:
+        return _buildClosenessCentralityControls();
     }
   }
 
@@ -2230,6 +2271,97 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
     );
   }
 
+  Widget _buildBetweennessCentralityControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Betweenness Centrality',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text('Finds nodes that act as bridges - critical connection points in the network.'),
+        const SizedBox(height: 16),
+
+        if (betweennessCentrality != null) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              border: Border.all(color: Colors.red.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Bridge Nodes (sorted by importance):',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ...betweennessCentrality!.entries
+                    .where((e) => e.value > 0.0)
+                    .toList()
+                    .asMap()
+                    .entries
+                    .map((indexedEntry) {
+                      final entry = indexedEntry.value;
+                      return Text('${entry.key}: ${(entry.value * 100).toStringAsFixed(1)}%');
+                    }),
+                if (betweennessCentrality!.values.every((v) => v == 0.0))
+                  const Text('No bridge nodes found - all nodes are peripheral.'),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildClosenessCentralityControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Closeness Centrality',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text('Finds nodes that are closest to all others - communication hubs.'),
+        const SizedBox(height: 16),
+
+        if (closenessCentrality != null) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              border: Border.all(color: Colors.green.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Most Central Nodes (sorted by closeness):',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ...closenessCentrality!.entries
+                    .toList()
+                    .asMap()
+                    .entries
+                    .map((indexedEntry) {
+                      final entry = indexedEntry.value;
+                      return Text('${entry.key}: ${(entry.value * 100).toStringAsFixed(1)}%');
+                    }),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Color _getComponentColor(int index) {
     final colors = [
       Colors.red,
@@ -2375,6 +2507,8 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
           reachableAllCenter = nodeId;
         case AlgorithmMode.connectedComponents:
         case AlgorithmMode.topologicalSort:
+        case AlgorithmMode.betweennessCentrality:
+        case AlgorithmMode.closenessCentrality:
           // No interaction needed
           break;
       }
@@ -2392,6 +2526,8 @@ class AlgorithmGraphPainter extends CustomPainter {
   final Set<String>? reachableByNodes;
   final Set<String>? reachableAllNodes;
   final List<String>? sortedNodes;
+  final Map<String, double>? betweennessCentrality;
+  final Map<String, double>? closenessCentrality;
   final String? sourceNode;
   final String? destinationNode;
   final String? reachabilitySource;
@@ -2408,6 +2544,8 @@ class AlgorithmGraphPainter extends CustomPainter {
     this.reachableByNodes,
     this.reachableAllNodes,
     this.sortedNodes,
+    this.betweennessCentrality,
+    this.closenessCentrality,
     this.sourceNode,
     this.destinationNode,
     this.reachabilitySource,
@@ -2623,6 +2761,10 @@ class AlgorithmGraphPainter extends CustomPainter {
 
       case AlgorithmMode.topologicalSort:
         return Colors.grey.shade400;
+
+      case AlgorithmMode.betweennessCentrality:
+      case AlgorithmMode.closenessCentrality:
+        return Colors.grey.shade400;
     }
   }
 
@@ -2662,6 +2804,10 @@ class AlgorithmGraphPainter extends CustomPainter {
           return 3.0;
         }
         return 1.0;
+
+      case AlgorithmMode.betweennessCentrality:
+      case AlgorithmMode.closenessCentrality:
+        return 2.0;
 
       default:
         return 2.0;
@@ -2719,6 +2865,26 @@ class AlgorithmGraphPainter extends CustomPainter {
           }
         }
         return Colors.grey.shade300;
+
+      case AlgorithmMode.betweennessCentrality:
+        if (betweennessCentrality != null) {
+          final centrality = betweennessCentrality![nodeId] ?? 0.0;
+          if (centrality > 0.0) {
+            // Red gradient based on betweenness score
+            return Color.lerp(Colors.orange.shade300, Colors.red.shade700, centrality)!;
+          }
+        }
+        return Colors.grey.shade300;
+
+      case AlgorithmMode.closenessCentrality:
+        if (closenessCentrality != null) {
+          final centrality = closenessCentrality![nodeId] ?? 0.0;
+          if (centrality > 0.0) {
+            // Green gradient based on closeness score
+            return Color.lerp(Colors.blue.shade300, Colors.green.shade700, centrality)!;
+          }
+        }
+        return Colors.grey.shade300;
     }
   }
 
@@ -2741,6 +2907,12 @@ class AlgorithmGraphPainter extends CustomPainter {
         if (nodeId == reachableAllCenter) return Colors.orange.shade800;
         return Colors.purple.shade600;
 
+      case AlgorithmMode.betweennessCentrality:
+        return Colors.red.shade800;
+
+      case AlgorithmMode.closenessCentrality:
+        return Colors.green.shade800;
+
       default:
         return Colors.grey.shade600;
     }
@@ -2762,6 +2934,22 @@ class AlgorithmGraphPainter extends CustomPainter {
 
       case AlgorithmMode.reachableAll:
         if (nodeId == reachableAllCenter) return 35.0;
+        return 30.0;
+
+      case AlgorithmMode.betweennessCentrality:
+        if (betweennessCentrality != null) {
+          final centrality = betweennessCentrality![nodeId] ?? 0.0;
+          // Scale radius from 25 to 40 based on centrality
+          return 25.0 + (centrality * 15.0);
+        }
+        return 30.0;
+
+      case AlgorithmMode.closenessCentrality:
+        if (closenessCentrality != null) {
+          final centrality = closenessCentrality![nodeId] ?? 0.0;
+          // Scale radius from 25 to 40 based on centrality
+          return 25.0 + (centrality * 15.0);
+        }
         return 30.0;
 
       default:
@@ -2846,6 +3034,8 @@ class AlgorithmGraphPainter extends CustomPainter {
         oldDelegate.reachableByNodes != reachableByNodes ||
         oldDelegate.reachableAllNodes != reachableAllNodes ||
         oldDelegate.sortedNodes != sortedNodes ||
+        oldDelegate.betweennessCentrality != betweennessCentrality ||
+        oldDelegate.closenessCentrality != closenessCentrality ||
         oldDelegate.sourceNode != sourceNode ||
         oldDelegate.destinationNode != destinationNode ||
         oldDelegate.reachabilitySource != reachabilitySource ||
