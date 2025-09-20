@@ -1,4 +1,8 @@
 
+## 0.6.4
+
+• Fix: bracket-aware pattern parsing and relaxed edge-type handling for special characters in `PatternQuery`.
+
 ## 0.6.3_+1
 
 • Fix: changed topics for package SEO
