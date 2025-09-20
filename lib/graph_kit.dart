@@ -28,14 +28,14 @@
 
 library;
 
-// Core graph components
-export 'src/node.dart';
-export 'src/graph.dart';
-export 'src/pattern_query.dart';
-export 'src/traversal.dart';
-export 'src/serialization.dart';
-
 // Type safety helpers
 export 'src/edge_type.dart';
-export 'src/node_type.dart';
 export 'src/extensions_typed.dart';
+export 'src/graph.dart';
+export 'src/graph_algorithms.dart';
+// Core graph components
+export 'src/node.dart';
+export 'src/node_type.dart';
+export 'src/pattern_query.dart';
+export 'src/serialization.dart';
+export 'src/traversal.dart';

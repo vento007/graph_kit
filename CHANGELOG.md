@@ -1,4 +1,9 @@
 
+## 0.6.5
+
+• Graph algorithms module with shortest path, connected components, reachability, and topological sort
+• Interactive Flutter demo and command-line demo for graph algorithms
+
 ## 0.6.4
 
 • Fix: bracket-aware pattern parsing and relaxed edge-type handling for special characters in `PatternQuery`.

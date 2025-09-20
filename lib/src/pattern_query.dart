@@ -659,7 +659,9 @@ class PatternQuery<N extends Node> {
       if (segment[i] == '[') {
         // Scan to ':' before the matching ']' (allow whitespace)
         int j = i + 1;
-        while (j < segment.length && segment[j].trim().isEmpty) j++;
+        while (j < segment.length && segment[j].trim().isEmpty) {
+          j++;
+        }
         bool foundColon = false;
         while (j < segment.length) {
           final c = segment[j];

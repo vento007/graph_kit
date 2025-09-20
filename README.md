@@ -43,16 +43,17 @@ In-memory, typed directed multigraph with:
 - **Multiple relationships** between the same nodes
 - A minimal, Cypher-inspired pattern engine for traversal
 - **Complete path results** with Neo4j-style edge information
+- **Graph algorithms** for analysis (shortest path, connected components, topological sort, reachability)
 
 ## Table of Contents
 
 - [1. Quick Preview](#1-quick-preview)
 - [2. Complete Usage Examples](#2-complete-usage-examples)
-- [3. Generic Traversal Utilities](#3-generic-traversal-utilities)
-- [4. Pattern Query Examples](#4-pattern-query-examples)
-- [5. Mini-Cypher Reference](#5-mini-cypher-reference)
-- [6. Comparison with Cypher](#6-comparison-with-cypher)
-- [7. Pattern syntax (mini, Cypher-inspired)](#7-pattern-syntax-mini-cypher-inspired)
+- [3. Graph Algorithms](#3-graph-algorithms)
+- [4. Generic Traversal Utilities](#4-generic-traversal-utilities)
+- [5. Pattern Query Examples](#5-pattern-query-examples)
+- [6. Mini-Cypher Reference](#6-mini-cypher-reference)
+- [7. Comparison with Cypher](#7-comparison-with-cypher)
 - [8. Design and performance](#8-design-and-performance)
 - [9. JSON Serialization](#9-json-serialization)
 - [10. Examples index](#10-examples-index)
@@ -262,7 +263,84 @@ print(engineeringWorkers); // {alice, bob}
 | `findByLabelContains()` | `Set<String>` | Nodes by label substring |
 | `outFrom()`/`inTo()` | `Set<String>` | Direct edge traversal |
 
-## 3. Generic Traversal Utilities
+## 3. Graph Algorithms
+
+Graph Kit includes efficient implementations of common graph algorithms for analysis and pathfinding:
+
+### Available Algorithms
+
+- **Shortest Path** - Find optimal routes between nodes using BFS (counts hops)
+- **Connected Components** - Identify groups of interconnected nodes
+- **Reachability Analysis** - Discover all nodes reachable from a starting point
+- **Topological Sort** - Order nodes by dependencies (useful for build systems, task scheduling)
+
+### Quick Example
+
+```dart
+import 'package:graph_kit/graph_kit.dart';
+
+// Create a dependency graph
+final graph = Graph<Node>();
+graph.addNode(Node(id: 'core', type: 'Package', label: 'Core'));
+graph.addNode(Node(id: 'utils', type: 'Package', label: 'Utils'));
+graph.addNode(Node(id: 'app', type: 'Package', label: 'App'));
+
+// Add dependencies (app depends on utils, utils depends on core)
+graph.addEdge('utils', 'DEPENDS_ON', 'core');
+graph.addEdge('app', 'DEPENDS_ON', 'utils');
+
+// Use graph algorithms
+final algorithms = GraphAlgorithms(graph);
+
+// Find shortest path (counts hops)
+final path = algorithms.shortestPath('app', 'core');
+print('Path: ${path.path}'); // [app, utils, core]
+print('Distance: ${path.distance}'); // 2
+
+// Get build order (topological sort)
+final buildOrder = algorithms.topologicalSort();
+print('Build order: $buildOrder'); // [core, utils, app]
+
+// Find connected components
+final components = algorithms.connectedComponents();
+print('Components: $components'); // [{core, utils, app}]
+
+// Check reachability
+final reachable = algorithms.reachableFrom('app');
+print('App can reach: $reachable'); // {app, utils, core}
+```
+
+
+### Visual Demo
+
+Run the interactive Flutter demo to see graph algorithms in action:
+
+```bash
+cd example
+flutter run
+```
+
+- Switch to **"Graph Algorithms"** tab
+- Click nodes to see shortest paths
+- View connected components with color coding
+- See topological sort with dependency levels
+- Explore reachability analysis
+
+### Command Line Demo
+
+For a focused algorithms demonstration:
+
+```bash
+dart run bin/algorithms_demo.dart
+```
+
+This shows practical examples of:
+- Package dependency analysis
+- Build order optimization
+- Component isolation detection
+- Shortest path finding
+
+## 4. Generic Traversal Utilities
 
 For BFS-style subgraph exploration around nodes within hop limits. Unlike pattern queries that follow specific paths, this explores neighborhoods in all directions using specified edge types.
 
@@ -317,14 +395,14 @@ print(projectEcosystem.edges.length); // 7
 | **Known relationships** | Yes - Clear path patterns | No |
 | **Unknown structure** | No | Yes - Explore what's connected |
 
-## 4. Pattern Query Examples
+## 5. Pattern Query Examples
 
 - **Simple patterns**: `"user:User"` → `{alice, bob, charlie}`
 - **Forward patterns**: `"user-[:MEMBER_OF]->group"`
 - **Backward patterns**: `"resource<-[:CAN_ACCESS]-group<-[:MEMBER_OF]-user"` → `{alice, bob}`
 - **Label filtering**: `"user:User{label~Admin}"` → `{bob}`
 
-## 5. Pattern Query Language (Mini-Cypher)
+## 6. Mini-Cypher Reference
 
 GraphKit uses a simplified version of **Cypher** - the query language used by Neo4j (the most popular graph database). Think of it like SQL for graphs.
 
@@ -442,7 +520,7 @@ query.match('person:Person{label~Alice}')
 
 **Remember:** The names you pick (`person`, `team`, etc.) become the keys in your results!
 
-## 6. Comparison with Cypher
+## 7. Comparison with Cypher
 
 | Feature               | Real Cypher | graph_kit           |
 |-----------------------|-------------|---------------------|
@@ -451,7 +529,7 @@ query.match('person:Person{label~Alice}')
 | Optional matches      | Yes         | Via `matchMany`     |
 | WHERE clauses         | Yes         | Via label filters   |
 
-## 7. Design and performance
+## 8. Design and performance
 
 - Traversal from a known ID (`startId`) is fast:
   - Each hop uses adjacency maps; cost is proportional to the edges visited.
@@ -459,7 +537,7 @@ query.match('person:Person{label~Alice}')
   - For small/medium graphs, this is effectively instant; indexing can be added later if needed.
 - `matchMany([...])` mirrors "multiple MATCH/OPTIONAL MATCH" lines in Cypher by running several independent chains from the same start and unioning results.
 
-## 8. JSON Serialization
+## 9. JSON Serialization
 
 Save and load graphs to/from JSON for persistence and data exchange:
 
@@ -491,7 +569,7 @@ final members = query.match('team<-[:MEMBER_OF]-user', startId: 'team1');
 print(members['user']); // {alice}
 ```
 
-## 9. Examples index
+## 10. Examples index
 
 ### Dart CLI Examples
 - `bin/showcase.dart` – comprehensive graph demo with multiple query examples
@@ -499,6 +577,7 @@ print(members['user']); // {alice}
 - `bin/project_dependencies.dart` – project dependency analysis and traversal
 - `bin/social_network.dart` – social network relationships and friend recommendations
 - `bin/serialization_demo.dart` – JSON serialization and persistence
+- `bin/algorithms_demo.dart` – graph algorithms demonstration with dependency analysis
 
 Run any example:
 ```bash
