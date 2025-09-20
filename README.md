@@ -63,9 +63,9 @@ In-memory, typed directed multigraph with:
 ## 1. Quick Preview
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/vento007/graph_kit/main/media/screenshoot2.png" alt="Graph Kit demo preview" width="840" />
+  <img src="https://raw.githubusercontent.com/vento007/graph_kit/main/media/screenshoot3.png" alt="Graph Kit demo preview" width="840" />
   <br/>
-  <em>Mini-Cypher query highlighting nodes and edges in the Flutter demo.</em>
+  <em>Interactive graph algorithms demo showing centrality analysis in the Flutter app.</em>
 
 </p>
 
@@ -273,6 +273,13 @@ Graph Kit includes efficient implementations of common graph algorithms for anal
 - **Connected Components** - Identify groups of interconnected nodes
 - **Reachability Analysis** - Discover all nodes reachable from a starting point
 - **Topological Sort** - Order nodes by dependencies (useful for build systems, task scheduling)
+- **Centrality Analysis** - Identify important nodes (betweenness and closeness centrality)
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/vento007/graph_kit/main/media/shortest_path.png" alt="Shortest path algorithm visualization" width="600" />
+  <br/>
+  <em>Shortest path visualization highlighting the optimal route between selected nodes.</em>
+</p>
 
 ### Quick Example
 
