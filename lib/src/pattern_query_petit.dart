@@ -150,6 +150,8 @@ class PetitPatternQuery<N extends Node> {
     // This is where we'll extract from parse tree instead of manual parsing
     _extractPartsFromParseTree(result.value, parts, directions);
 
+    // Debug removed - working correctly
+
     if (parts.isEmpty) return const <Map<String, String>>[];
 
     // Helper to extract alias name from a part (copied from original)
@@ -276,7 +278,7 @@ class PetitPatternQuery<N extends Node> {
   String _flattenSegment(dynamic segment) {
     if (segment is List && segment.length >= 3) {
       final variable = _flattenToString(segment[0]);
-      final nodeType = segment[1] != null ? ':${_flattenToString(segment[1])}' : '';
+      final nodeType = segment[1] != null ? ':${_flattenToString(segment[1]).replaceFirst(':', '')}' : '';
       final labelFilter = segment[2] != null ? _flattenToString(segment[2]) : '';
       return variable + nodeType + labelFilter;
     }
@@ -296,8 +298,57 @@ class PetitPatternQuery<N extends Node> {
   }
 
   void _seedFromFirstSegment(String firstPart, String firstAlias, List<Map<String, String>> currentRows) {
-    // TODO: Extract type and label filters from parse tree
-    throw UnimplementedError('Parse tree-based seeding coming next');
+    // Extract type and label info from the first part string
+    // Since we already flattened the parse tree to a string, we can parse it similar to original
+    String? nodeType;
+    String? labelOp; // '=' or '~'
+    String? labelVal;
+
+    String descriptor = firstPart;
+    String head = descriptor;
+
+    // Handle label filter
+    final braceStart = descriptor.indexOf('{');
+    if (braceStart != -1) {
+      if (!descriptor.endsWith('}')) {
+        return; // malformed label filter
+      }
+      head = descriptor.substring(0, braceStart).trim();
+      final inside = descriptor
+          .substring(braceStart + 1, descriptor.length - 1)
+          .trim();
+      final m = RegExp(r'^label\s*([=~])\s*(.+)$').firstMatch(inside);
+      if (m != null) {
+        labelOp = m.group(1);
+        labelVal = m.group(2);
+        if (labelVal == null || labelVal.trim().isEmpty) {
+          return;
+        }
+      } else if (inside.isNotEmpty) {
+        return; // malformed
+      }
+    }
+
+    // Handle node type
+    if (head.contains(':')) {
+      final typeParts = head.split(':');
+      nodeType = typeParts.length > 1 ? typeParts[1].trim() : null;
+    }
+
+    // Seed by scanning nodes matching type/label (copied from original)
+    for (final node in graph.nodesById.values) {
+      if (nodeType != null && node.type != nodeType) continue;
+      if (labelOp != null && labelVal != null) {
+        if (labelOp == '=') {
+          if (node.label != labelVal) continue;
+        } else if (labelOp == '~') {
+          final hay = node.label.toLowerCase();
+          final needle = labelVal.toLowerCase();
+          if (!hay.contains(needle)) continue;
+        }
+      }
+      currentRows.add({firstAlias: node.id});
+    }
   }
 
   // Copied helper methods from original parser
@@ -345,5 +396,117 @@ class PetitPatternQuery<N extends Node> {
   List<PathEdge> _buildEdgesForRow(String pattern, Map<String, String> row) {
     // TODO: Build edges from parse tree instead of re-parsing pattern
     return <PathEdge>[];
+  }
+
+  // --- Utility finder methods (copied from original) ---
+
+  /// Finds all node IDs with the given [type].
+  Set<String> findByType(String type) {
+    return graph.nodesById.values
+        .where((n) => n.type == type)
+        .map((n) => n.id)
+        .toSet();
+  }
+
+  /// Finds node IDs whose label exactly matches [label].
+  Set<String> findByLabelEquals(String label, {bool caseInsensitive = false}) {
+    if (!caseInsensitive) {
+      return graph.nodesById.values
+          .where((n) => n.label == label)
+          .map((n) => n.id)
+          .toSet();
+    }
+    final needle = label.toLowerCase();
+    return graph.nodesById.values
+        .where((n) => n.label.toLowerCase() == needle)
+        .map((n) => n.id)
+        .toSet();
+  }
+
+  /// Finds node IDs whose label contains the substring [contains].
+  Set<String> findByLabelContains(
+    String contains, {
+    bool caseInsensitive = true,
+  }) {
+    final needle = caseInsensitive ? contains.toLowerCase() : contains;
+    return graph.nodesById.values
+        .where(
+          (n) => (caseInsensitive ? n.label.toLowerCase() : n.label).contains(
+            needle,
+          ),
+        )
+        .map((n) => n.id)
+        .toSet();
+  }
+
+  /// Returns outbound neighbors from [srcId] via [edgeType].
+  Set<String> outFrom(String srcId, String edgeType) =>
+      graph.outNeighbors(srcId, edgeType);
+
+  /// Returns inbound neighbors to [dstId] via [edgeType].
+  Set<String> inTo(String dstId, String edgeType) =>
+      graph.inNeighbors(dstId, edgeType);
+
+  /// Finds all destinations reachable via [edgeType] from any source in [srcIds].
+  Set<String> findByEdgeFrom(Iterable<String> srcIds, String edgeType) {
+    final out = <String>{};
+    for (final id in srcIds) {
+      out.addAll(graph.outNeighbors(id, edgeType));
+    }
+    return out;
+  }
+
+  /// Finds all sources that can reach any destination in [dstIds] via [edgeType].
+  Set<String> findByEdgeTo(Iterable<String> dstIds, String edgeType) {
+    final ins = <String>{};
+    for (final id in dstIds) {
+      ins.addAll(graph.inNeighbors(id, edgeType));
+    }
+    return ins;
+  }
+
+  /// Execute multiple patterns and concatenate row results (deduplicated).
+  List<Map<String, String>> matchRowsMany(
+    List<String> patterns, {
+    String? startId,
+  }) {
+    final out = <Map<String, String>>[];
+    final seen = <String>{};
+    for (final p in patterns) {
+      final rows = matchRows(p, startId: startId);
+      for (final r in rows) {
+        final keys = r.keys.toList()..sort();
+        final sig = keys.map((k) => '$k=${r[k]}').join('|');
+        if (seen.add(sig)) out.add(r);
+      }
+    }
+    return out;
+  }
+
+  /// Execute multiple patterns and unions the results by variable name.
+  Map<String, Set<String>> matchMany(List<String> patterns, {String? startId}) {
+    final combined = <String, Set<String>>{};
+    for (final pattern in patterns) {
+      final results = match(pattern, startId: startId);
+      for (final entry in results.entries) {
+        combined.putIfAbsent(entry.key, () => {}).addAll(entry.value);
+      }
+    }
+    return combined;
+  }
+
+  /// Execute multiple patterns and return path matches with edge information.
+  List<PathMatch> matchPathsMany(List<String> patterns, {String? startId}) {
+    final out = <PathMatch>[];
+    final seen = <String>{};
+    for (final pattern in patterns) {
+      final paths = matchPaths(pattern, startId: startId);
+      for (final path in paths) {
+        final keys = path.nodes.keys.toList()..sort();
+        final sig = keys.map((k) => '$k=${path.nodes[k]}').join('|');
+        if (seen.add(sig)) out.add(path);
+      }
+    }
+    return out;
   }
 }

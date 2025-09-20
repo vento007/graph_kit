@@ -190,5 +190,45 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
         expect(directions[0], isTrue); // forward arrow
       }
     });
+
+    test('side-by-side comparison with original parser', () {
+      // Create test graph
+      final graph = Graph<Node>();
+      graph.addNode(Node(id: 'alice', type: 'Person', label: 'Alice Cooper'));
+      graph.addNode(Node(id: 'bob', type: 'Person', label: 'Bob Wilson'));
+      graph.addNode(Node(id: 'engineering', type: 'Team', label: 'Engineering'));
+      graph.addNode(Node(id: 'design', type: 'Team', label: 'Design'));
+
+      graph.addEdge('alice', 'engineering', 'WORKS_FOR');
+      graph.addEdge('bob', 'design', 'WORKS_FOR');
+
+      // Create both parsers
+      final originalQuery = PatternQuery(graph);
+      final petitQuery = PetitPatternQuery(graph);
+
+      // Test simple pattern
+      print('=== Testing simple pattern: user:Person ===');
+      final original1 = originalQuery.match('user:Person');
+      print('Original result: $original1');
+
+      final petit1 = petitQuery.match('user:Person');
+      print('Petit result: $petit1');
+
+      // Test pattern with edge
+      print('=== Testing pattern with edge: user:Person-[:WORKS_FOR]->team:Team ===');
+      final original2 = originalQuery.match('user:Person-[:WORKS_FOR]->team:Team');
+      print('Original result: $original2');
+
+      final petit2 = petitQuery.match('user:Person-[:WORKS_FOR]->team:Team');
+      print('Petit result: $petit2');
+
+      // Test label filter
+      print('=== Testing label filter: user:Person{label~Alice} ===');
+      final original3 = originalQuery.match('user:Person{label~Alice}');
+      print('Original result: $original3');
+
+      final petit3 = petitQuery.match('user:Person{label~Alice}');
+      print('Petit result: $petit3');
+    });
   });
 }
