@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:graph_kit/graph_kit.dart';
-import 'package:graph_kit/src/pattern_query_petit.dart' as petit;
+import 'package:graph_kit/graph_kit.dart' as petit;
 import 'dart:math' as math;
 
 void main() {
@@ -113,7 +113,7 @@ class GraphVisualization extends StatefulWidget {
 
 class _GraphVisualizationState extends State<GraphVisualization> {
   late Graph<Node> graph;
-  late petit.PetitPatternQuery query;
+  late PatternQuery query;
   final TextEditingController _queryController = TextEditingController();
   Map<String, Set<String>>? queryResults;
   List<Map<String, String>>? queryRows;
@@ -224,7 +224,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     graph.addEdge('marketing', 'ASSIGNED_TO', 'campaign');
     graph.addEdge('alice', 'LEADS', 'web_app');
 
-    query = petit.PetitPatternQuery(graph);
+    query = PatternQuery(graph);
     _graphSetupCode = _buildGraphSetupCode();
   }
 
