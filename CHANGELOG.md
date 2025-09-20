@@ -1,4 +1,16 @@
 
+## 0.6.10
+
+### Added
+- Variable-length path support in PetitParser implementation
+- Support for Cypher-style variable-length relationships: `[:TYPE*]`, `[:TYPE*1..3]`, `[:TYPE*2..]`, `[:TYPE*..4]`
+- Comprehensive grammar parsing for all variable-length syntax variations
+- Integration with existing `enumeratePaths` function for efficient variable-length execution
+
+### Note
+- Variable-length paths are only supported in PetitParser, not the original PatternQuery
+- The PetitParser will become the default parser in a future release 
+
 ## 0.6.9
 
 ### Added
