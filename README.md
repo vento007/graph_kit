@@ -270,6 +270,7 @@ Graph Kit includes efficient implementations of common graph algorithms for anal
 ### Available Algorithms
 
 - **Shortest Path** - Find optimal routes between nodes using BFS (counts hops)
+- **Path Enumeration** - Find all possible routes between nodes within hop limits
 - **Connected Components** - Identify groups of interconnected nodes
 - **Reachability Analysis** - Discover all nodes reachable from a starting point
 - **Topological Sort** - Order nodes by dependencies (useful for build systems, task scheduling)
@@ -303,6 +304,10 @@ final algorithms = GraphAlgorithms(graph);
 final path = algorithms.shortestPath('app', 'core');
 print('Path: ${path.path}'); // [app, utils, core]
 print('Distance: ${path.distance}'); // 2
+
+// Find all possible paths
+final allPaths = enumeratePaths(graph, 'app', 'core', maxHops: 4);
+print('Routes: ${allPaths.paths.length}'); // All alternative routes
 
 // Get build order (topological sort)
 final buildOrder = algorithms.topologicalSort();

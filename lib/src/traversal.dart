@@ -246,3 +246,126 @@ SubgraphResult expandSubgraph<N extends Node>(
     backwardDist: Map.unmodifiable(bwd.dist),
   );
 }
+
+/// Result of path enumeration containing all discovered paths.
+class PathEnumerationResult {
+  /// All simple paths found from source to target.
+  final List<List<String>> paths;
+
+  /// Number of paths that were truncated due to hop limit.
+  final int truncatedPaths;
+
+  /// Total number of nodes explored during search.
+  final int nodesExplored;
+
+  const PathEnumerationResult({
+    required this.paths,
+    required this.truncatedPaths,
+    required this.nodesExplored,
+  });
+
+  /// Returns true if any paths were found.
+  bool get hasPaths => paths.isNotEmpty;
+
+  /// Returns the shortest path by hop count, or null if no paths exist.
+  List<String>? get shortestPath => paths.isEmpty ? null :
+    paths.reduce((a, b) => a.length <= b.length ? a : b);
+}
+
+/// Enumerates all simple paths between two nodes within a hop limit.
+///
+/// Finds all possible routes from [from] to [to] that:
+/// - Don't revisit nodes (simple paths)
+/// - Stay within [maxHops] limit
+/// - Use only specified [edgeTypes] if provided
+///
+/// Uses subgraph expansion to optimize search space before path enumeration.
+///
+/// Example:
+/// ```dart
+/// final result = enumeratePaths(graph, 'teamA', 'core', maxHops: 4);
+/// print('Found ${result.paths.length} paths');
+/// for (final path in result.paths) {
+///   print('Path: ${path.join(' -> ')}');
+/// }
+/// ```
+PathEnumerationResult enumeratePaths(
+  Graph<Node> graph,
+  String from,
+  String to, {
+  required int maxHops,
+  Set<String>? edgeTypes,
+}) {
+  // Early validation
+  if (!graph.nodesById.containsKey(from) || !graph.nodesById.containsKey(to)) {
+    return const PathEnumerationResult(paths: [], truncatedPaths: 0, nodesExplored: 0);
+  }
+
+  if (from == to) {
+    return PathEnumerationResult(paths: [[from]], truncatedPaths: 0, nodesExplored: 1);
+  }
+
+  // Pre-prune search space using subgraph expansion
+  final subgraph = expandSubgraph(
+    graph,
+    seeds: {from},
+    edgeTypesRightward: edgeTypes ?? graph.out.values
+        .expand((nodeEdges) => nodeEdges.keys)
+        .toSet(),
+    forwardHops: maxHops,
+    backwardHops: 0,
+  );
+
+  // If target not reachable within hop limit, return empty
+  if (!subgraph.nodes.contains(to)) {
+    return const PathEnumerationResult(paths: [], truncatedPaths: 0, nodesExplored: 0);
+  }
+
+  // DFS path enumeration within pruned subgraph
+  final allPaths = <List<String>>[];
+  int truncatedCount = 0;
+  final exploredNodes = <String>{};
+
+  void dfs(String current, List<String> currentPath, Set<String> visited) {
+    exploredNodes.add(current);
+
+    if (current == to) {
+      allPaths.add(List.from(currentPath));
+      return;
+    }
+
+    if (currentPath.length >= maxHops) {
+      truncatedCount++;
+      return;
+    }
+
+    final outgoing = graph.out[current];
+    if (outgoing == null) return;
+
+    for (final edgeType in outgoing.keys) {
+      if (edgeTypes != null && !edgeTypes.contains(edgeType)) continue;
+
+      for (final neighbor in outgoing[edgeType]!) {
+        // Only explore nodes in our pruned subgraph
+        if (!subgraph.nodes.contains(neighbor)) continue;
+        if (visited.contains(neighbor)) continue; // Avoid cycles
+
+        currentPath.add(neighbor);
+        visited.add(neighbor);
+
+        dfs(neighbor, currentPath, visited);
+
+        visited.remove(neighbor);
+        currentPath.removeLast();
+      }
+    }
+  }
+
+  dfs(from, [from], {from});
+
+  return PathEnumerationResult(
+    paths: allPaths,
+    truncatedPaths: truncatedCount,
+    nodesExplored: exploredNodes.length,
+  );
+}
