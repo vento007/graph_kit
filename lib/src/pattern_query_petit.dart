@@ -135,26 +135,215 @@ class PetitPatternQuery<N extends Node> {
     _parser = definition.build();
   }
 
-  // Stub implementations for now - we'll build these incrementally
-  Map<String, Set<String>> match(String pattern, {String? startId}) {
+  /// Core implementation of pattern matching using parse tree
+  List<Map<String, String>> matchRows(String pattern, {String? startId}) {
     final result = _parser.parse(pattern);
     if (result is Failure) {
-      throw FormatException('Parse error: ${result.message}');
+      return const <Map<String, String>>[];
     }
 
-    // TODO: Convert parse tree to query execution
-    throw UnimplementedError('Parse tree interpretation coming soon');
+    // TODO: Convert parse tree to parts and directions
+    // For now, we'll use the same structure as original parser
+    final parts = <String>[];
+    final directions = <bool>[];
+
+    // This is where we'll extract from parse tree instead of manual parsing
+    _extractPartsFromParseTree(result.value, parts, directions);
+
+    if (parts.isEmpty) return const <Map<String, String>>[];
+
+    // Helper to extract alias name from a part (copied from original)
+    String aliasOf(String part) {
+      if (part.startsWith('[')) {
+        final afterEdge = part.substring(part.indexOf('-') + 1);
+        return afterEdge.split(RegExp(r'[-\[:]')).first.trim();
+      } else {
+        return part.split(RegExp(r'[-\[:]')).first.trim();
+      }
+    }
+
+    // Seed rows (copied logic from original)
+    List<Map<String, String>> currentRows = <Map<String, String>>[];
+    final firstAlias = aliasOf(parts.first);
+    if (firstAlias.isEmpty) {
+      return const <Map<String, String>>[];
+    }
+
+    if (startId != null) {
+      currentRows = <Map<String, String>>[
+        {firstAlias: startId},
+      ];
+    } else {
+      // Parse optional type and label filter in first segment
+      // TODO: Extract from parse tree instead of manual parsing
+      _seedFromFirstSegment(parts.first, firstAlias, currentRows);
+    }
+
+    // Traverse over each hop, expanding rows (copied from original)
+    for (var i = 0; i < parts.length - 1; i++) {
+      final part = parts[i];
+      final aliasHere = aliasOf(part);
+      final nextAlias = aliasOf(parts[i + 1]);
+
+      final isForward = directions[i];
+      final edgePart = isForward ? part : parts[i + 1];
+      final edgeType = _edgeTypeFrom(edgePart);
+      if (edgeType == null) {
+        return const <Map<String, String>>[];
+      }
+      final edgeTypeTrimmed = edgeType.trim();
+      if (edgeTypeTrimmed.isEmpty) return const <Map<String, String>>[];
+
+      final nextRows = <Map<String, String>>[];
+      final seen = <String>{};
+
+      for (final row in currentRows) {
+        final srcId = row[aliasHere];
+        if (srcId == null) continue;
+        final neighbors = isForward
+            ? graph.outNeighbors(srcId, edgeTypeTrimmed)
+            : graph.inNeighbors(srcId, edgeTypeTrimmed);
+        for (final nb in neighbors) {
+          final newRow = Map<String, String>.from(row);
+          newRow[nextAlias] = nb;
+          final keys = newRow.keys.toList()..sort();
+          final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
+          if (seen.add(sig)) {
+            nextRows.add(newRow);
+          }
+        }
+      }
+
+      currentRows = nextRows;
+      if (currentRows.isEmpty) break;
+    }
+
+    return currentRows;
   }
 
-  List<Map<String, String>> matchRows(String pattern, {String? startId}) {
-    // TODO: Implement with petitparser
-    throw UnimplementedError('PetitParser implementation coming soon');
+  Map<String, Set<String>> match(String pattern, {String? startId}) {
+    final paths = matchPaths(pattern, startId: startId);
+    final results = <String, Set<String>>{};
+    for (final path in paths) {
+      for (final entry in path.nodes.entries) {
+        results.putIfAbsent(entry.key, () => <String>{}).add(entry.value);
+      }
+    }
+    return results;
   }
 
   List<PathMatch> matchPaths(String pattern, {String? startId}) {
-    // TODO: Implement with petitparser
-    throw UnimplementedError('PetitParser implementation coming soon');
+    final rows = matchRows(pattern, startId: startId);
+    final pathMatches = <PathMatch>[];
+    for (final row in rows) {
+      final edges = _buildEdgesForRow(pattern, row);
+      pathMatches.add(PathMatch(nodes: row, edges: edges));
+    }
+    return pathMatches;
   }
 
-  // All other methods would be implemented similarly...
+  // Extract segments and directions from parse tree (visible for testing)
+  void extractPartsFromParseTreeForTesting(dynamic parseTree, List<String> parts, List<bool> directions) {
+    _extractPartsFromParseTree(parseTree, parts, directions);
+  }
+
+  void _extractPartsFromParseTree(dynamic parseTree, List<String> parts, List<bool> directions) {
+    if (parseTree is! List) return;
+
+    // First element is the initial segment
+    final firstSegment = parseTree[0];
+    parts.add(_flattenSegment(firstSegment));
+
+    // Remaining elements are [connection, segment] pairs
+    if (parseTree.length > 1 && parseTree[1] is List) {
+      final connections = parseTree[1] as List;
+      for (final connectionPair in connections) {
+        if (connectionPair is List && connectionPair.length >= 2) {
+          final connection = connectionPair[0];
+          final segment = connectionPair[1];
+
+          // Determine direction from connection
+          final connectionStr = _flattenConnection(connection);
+          directions.add(connectionStr.contains('->'));
+
+          // Add the segment
+          parts.add(_flattenSegment(segment));
+        }
+      }
+    }
+  }
+
+  String _flattenSegment(dynamic segment) {
+    if (segment is List && segment.length >= 3) {
+      final variable = _flattenToString(segment[0]);
+      final nodeType = segment[1] != null ? ':${_flattenToString(segment[1])}' : '';
+      final labelFilter = segment[2] != null ? _flattenToString(segment[2]) : '';
+      return variable + nodeType + labelFilter;
+    }
+    return _flattenToString(segment);
+  }
+
+  String _flattenConnection(dynamic connection) {
+    return _flattenToString(connection);
+  }
+
+  String _flattenToString(dynamic obj) {
+    if (obj is String) return obj;
+    if (obj is List) {
+      return obj.map((e) => _flattenToString(e)).join('');
+    }
+    return obj?.toString() ?? '';
+  }
+
+  void _seedFromFirstSegment(String firstPart, String firstAlias, List<Map<String, String>> currentRows) {
+    // TODO: Extract type and label filters from parse tree
+    throw UnimplementedError('Parse tree-based seeding coming next');
+  }
+
+  // Copied helper methods from original parser
+  String? _edgeTypeFrom(String segment) {
+    for (int i = 0; i < segment.length; i++) {
+      if (segment[i] == '[') {
+        int j = i + 1;
+        while (j < segment.length && segment[j].trim().isEmpty) {
+          j++;
+        }
+        bool foundColon = false;
+        while (j < segment.length) {
+          final c = segment[j];
+          if (c == ':') {
+            foundColon = true;
+            j++;
+            break;
+          }
+          if (c == ']') break;
+          j++;
+        }
+        if (!foundColon) continue;
+
+        int depth = 1;
+        final contentStart = j;
+        int k = j;
+        while (k < segment.length) {
+          final c = segment[k];
+          if (c == '[') {
+            depth++;
+          } else if (c == ']') {
+            depth--;
+            if (depth == 0) {
+              return segment.substring(contentStart, k);
+            }
+          }
+          k++;
+        }
+        return null;
+      }
+    }
+    return null;
+  }
+
+  List<PathEdge> _buildEdgesForRow(String pattern, Map<String, String> row) {
+    // TODO: Build edges from parse tree instead of re-parsing pattern
+    return <PathEdge>[];
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:test/test.dart';
 import 'package:petitparser/petitparser.dart';
+import 'package:graph_kit/graph_kit.dart';
 import 'package:graph_kit/src/pattern_query_petit.dart';
 
 void main() {
@@ -143,6 +144,50 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
         print('Failed at position: ${result.position}');
         final context = complexPattern.substring(0, result.position) + ' <-- HERE --> ' + complexPattern.substring(result.position);
         print('Context: $context');
+      } else {
+        print('Parse tree: ${result.value}');
+      }
+    });
+
+    test('explore parse tree structure', () {
+      final parser = grammar.build();
+
+      // Simple pattern to understand structure
+      print('=== Testing simple pattern ===');
+      final result1 = parser.parse('user->group');
+      if (result1 is Success) {
+        print('Simple parse tree: ${result1.value}');
+        print('Type: ${result1.value.runtimeType}');
+      }
+
+      // Pattern with edge type
+      print('=== Testing pattern with edge ===');
+      final result2 = parser.parse('user-[:WORKS_FOR]->team');
+      if (result2 is Success) {
+        print('Edge parse tree: ${result2.value}');
+      }
+    });
+
+    test('test parse tree extraction', () {
+      final query = PetitPatternQuery(Graph<Node>());
+
+      // Test extraction method directly
+      final parser = grammar.build();
+      final result = parser.parse('user->group');
+
+      if (result is Success) {
+        final parts = <String>[];
+        final directions = <bool>[];
+        query.extractPartsFromParseTreeForTesting(result.value, parts, directions);
+
+        print('Extracted parts: $parts');
+        print('Extracted directions: $directions');
+
+        expect(parts.length, equals(2));
+        expect(directions.length, equals(1));
+        expect(parts[0], contains('user'));
+        expect(parts[1], contains('group'));
+        expect(directions[0], isTrue); // forward arrow
       }
     });
   });
