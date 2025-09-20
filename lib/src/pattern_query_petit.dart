@@ -328,7 +328,12 @@ class PetitPatternQuery<N extends Node> {
     String? labelOp; // '=' or '~'
     String? labelVal;
 
+    // Remove edge info from descriptor for seeding (e.g., "person:Person[:WORKS_FOR]" -> "person:Person")
     String descriptor = firstPart;
+    final edgeStart = descriptor.indexOf('[');
+    if (edgeStart != -1) {
+      descriptor = descriptor.substring(0, edgeStart);
+    }
     String head = descriptor;
 
     // Handle label filter
