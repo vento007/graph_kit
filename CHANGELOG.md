@@ -8,10 +8,10 @@
 ## 0.6.7
 
 ### Added
-- **New reachability methods** in GraphAlgorithms:
-  - `reachableBy()` - finds all nodes that can reach a target node (follows incoming edges)
-  - `reachableAll()` - finds all nodes connected bidirectionally (follows both incoming and outgoing edges)
- 
+- New reachability methods in GraphAlgorithms
+- reachableBy() method finds all nodes that can reach a target node
+- reachableAll() method finds all nodes connected bidirectionally
+
 ## 0.6.6
 
 ### Added
@@ -20,33 +20,40 @@
 
 ## 0.6.5
 
-• Graph algorithms module with shortest path, connected components, reachability, and topological sort
-• Interactive Flutter demo and command-line demo for graph algorithms
+### Added
+- Graph algorithms module with shortest path, connected components, reachability, and topological sort
+- Interactive Flutter demo and command-line demo for graph algorithms
 
 ## 0.6.4
 
-• Fix: bracket-aware pattern parsing and relaxed edge-type handling for special characters in `PatternQuery`.
+### Fixed
+- Bracket-aware pattern parsing and relaxed edge-type handling for special characters in PatternQuery
 
 ## 0.6.3+1
 
-• Fix: changed topics for package SEO
+### Fixed
+- Changed topics for package SEO
 
 ## 0.6.2+1
 
-• Fix: code formatting to meet pub.dev static analysis requirements
+### Fixed
+- Code formatting to meet pub.dev static analysis requirements
 
 ## 0.6.2
 
-• Docs: rewrote README.md for clearer presentation and updated examples to use published package
+### Changed
+- Rewrote README.md for clearer presentation and updated examples to use published package
 
 ## 0.6.1
 
-• Fix: match() method now returns only connected nodes instead of all nodes of matching type
+### Fixed
+- match() method now returns only connected nodes instead of all nodes of matching type
 
 ## 0.6.0
 
-• Added PathMatch and PathEdge classes for complete path results with Neo4j-style edge information
-• New matchPaths() and matchPathsMany() methods for full path traversal details
+### Added
+- PathMatch and PathEdge classes for complete path results with Neo4j-style edge information
+- matchPaths() and matchPathsMany() methods for full path traversal details
 
 ## 0.5.2
 
