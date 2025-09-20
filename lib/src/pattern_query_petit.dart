@@ -268,11 +268,35 @@ class PetitPatternQuery<N extends Node> {
           final connectionStr = _flattenConnection(connection);
           directions.add(connectionStr.contains('->'));
 
-          // Add the segment
-          parts.add(_flattenSegment(segment));
+          // Add edge info to the appropriate part based on direction
+          final edgeInfo = _extractEdgeFromConnection(connection);
+          final isForward = connectionStr.contains('->');
+
+          if (isForward) {
+            // Forward: edge info goes with current (source) part
+            if (parts.isNotEmpty && edgeInfo.isNotEmpty) {
+              parts[parts.length - 1] = parts[parts.length - 1] + edgeInfo;
+            }
+            parts.add(_flattenSegment(segment));
+          } else {
+            // Backward: edge info goes with next (target) part
+            final nextSegment = _flattenSegment(segment);
+            if (edgeInfo.isNotEmpty) {
+              parts.add(nextSegment + edgeInfo);
+            } else {
+              parts.add(nextSegment);
+            }
+          }
         }
       }
     }
+  }
+
+  String _extractEdgeFromConnection(dynamic connection) {
+    final connectionStr = _flattenToString(connection);
+    // Extract edge type like [:WORKS_FOR] from connection
+    final match = RegExp(r'\[([^\]]+)\]').firstMatch(connectionStr);
+    return match != null ? '${match.group(0)}' : '';
   }
 
   String _flattenSegment(dynamic segment) {
