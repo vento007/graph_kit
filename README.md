@@ -308,6 +308,14 @@ print('Components: $components'); // [{core, utils, app}]
 // Check reachability
 final reachable = algorithms.reachableFrom('app');
 print('App can reach: $reachable'); // {app, utils, core}
+
+// Check what can reach a target
+final reachableBy = algorithms.reachableBy('core');
+print('Can reach core: $reachableBy'); // {app, utils, core}
+
+// Check all connected nodes (bidirectional)
+final reachableAll = algorithms.reachableAll('utils');
+print('Connected to utils: $reachableAll'); // {app, utils, core}
 ```
 
 

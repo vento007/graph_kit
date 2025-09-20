@@ -1600,7 +1600,9 @@ extension OffsetExtension on Offset {
 enum AlgorithmMode {
   shortestPath('Shortest Path', 'Find optimal routes between nodes'),
   connectedComponents('Connected Components', 'Group related nodes'),
-  reachability('Reachability', 'See what nodes can reach others'),
+  reachability('Reachable From', 'See what nodes can be reached from a source'),
+  reachableBy('Reachable By', 'See what nodes can reach a target'),
+  reachableAll('Bidirectional Reach', 'See all nodes connected in either direction'),
   topologicalSort('Topological Sort', 'Order nodes by dependencies');
 
   const AlgorithmMode(this.title, this.description);
@@ -1631,6 +1633,14 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
   // Reachability state
   String? reachabilitySource;
   Set<String>? reachableNodes;
+
+  // ReachableBy state
+  String? reachableByTarget;
+  Set<String>? reachableByNodes;
+
+  // ReachableAll state
+  String? reachableAllCenter;
+  Set<String>? reachableAllNodes;
 
   // Topological sort state
   List<String>? sortedNodes;
@@ -1680,6 +1690,14 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
       case AlgorithmMode.reachability:
         if (reachabilitySource != null) {
           reachableNodes = algorithms.reachableFrom(reachabilitySource!);
+        }
+      case AlgorithmMode.reachableBy:
+        if (reachableByTarget != null) {
+          reachableByNodes = algorithms.reachableBy(reachableByTarget!);
+        }
+      case AlgorithmMode.reachableAll:
+        if (reachableAllCenter != null) {
+          reachableAllNodes = algorithms.reachableAll(reachableAllCenter!);
         }
       case AlgorithmMode.topologicalSort:
         try {
@@ -1781,10 +1799,14 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
                         pathResult: pathResult,
                         components: components,
                         reachableNodes: reachableNodes,
+                        reachableByNodes: reachableByNodes,
+                        reachableAllNodes: reachableAllNodes,
                         sortedNodes: sortedNodes,
                         sourceNode: sourceNode,
                         destinationNode: destinationNode,
                         reachabilitySource: reachabilitySource,
+                        reachableByTarget: reachableByTarget,
+                        reachableAllCenter: reachableAllCenter,
                         onNodeTap: _handleNodeTap,
                       ),
                       size: Size.infinite,
@@ -1807,6 +1829,10 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
         return _buildConnectedComponentsControls();
       case AlgorithmMode.reachability:
         return _buildReachabilityControls();
+      case AlgorithmMode.reachableBy:
+        return _buildReachableByControls();
+      case AlgorithmMode.reachableAll:
+        return _buildReachableAllControls();
       case AlgorithmMode.topologicalSort:
         return _buildTopologicalSortControls();
     }
@@ -2000,6 +2026,116 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
             setState(() {
               reachabilitySource = null;
               reachableNodes = null;
+            });
+          },
+          child: const Text('Clear'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReachableByControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Reachable By Analysis',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text('Click a node to see all nodes that can reach it.'),
+        const SizedBox(height: 16),
+
+        if (reachableByTarget != null) ...[
+          Text('Target: $reachableByTarget', style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+
+          if (reachableByNodes != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                border: Border.all(color: Colors.green.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Nodes that can reach target:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(reachableByNodes!.join(', ')),
+                  const SizedBox(height: 8),
+                  Text('Total: ${reachableByNodes!.length} nodes'),
+                ],
+              ),
+            ),
+          ],
+        ],
+
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: () {
+            setState(() {
+              reachableByTarget = null;
+              reachableByNodes = null;
+            });
+          },
+          child: const Text('Clear'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReachableAllControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Bidirectional Reachability',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text('Click a node to see all nodes connected in either direction.'),
+        const SizedBox(height: 16),
+
+        if (reachableAllCenter != null) ...[
+          Text('Center: $reachableAllCenter', style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+
+          if (reachableAllNodes != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.purple.shade50,
+                border: Border.all(color: Colors.purple.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Connected nodes (all directions):',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(reachableAllNodes!.join(', ')),
+                  const SizedBox(height: 8),
+                  Text('Total: ${reachableAllNodes!.length} nodes'),
+                ],
+              ),
+            ),
+          ],
+        ],
+
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: () {
+            setState(() {
+              reachableAllCenter = null;
+              reachableAllNodes = null;
             });
           },
           child: const Text('Clear'),
@@ -2233,6 +2369,10 @@ class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
           }
         case AlgorithmMode.reachability:
           reachabilitySource = nodeId;
+        case AlgorithmMode.reachableBy:
+          reachableByTarget = nodeId;
+        case AlgorithmMode.reachableAll:
+          reachableAllCenter = nodeId;
         case AlgorithmMode.connectedComponents:
         case AlgorithmMode.topologicalSort:
           // No interaction needed
@@ -2249,10 +2389,14 @@ class AlgorithmGraphPainter extends CustomPainter {
   final ShortestPathResult? pathResult;
   final List<Set<String>>? components;
   final Set<String>? reachableNodes;
+  final Set<String>? reachableByNodes;
+  final Set<String>? reachableAllNodes;
   final List<String>? sortedNodes;
   final String? sourceNode;
   final String? destinationNode;
   final String? reachabilitySource;
+  final String? reachableByTarget;
+  final String? reachableAllCenter;
   final Function(String) onNodeTap;
 
   AlgorithmGraphPainter({
@@ -2261,10 +2405,14 @@ class AlgorithmGraphPainter extends CustomPainter {
     this.pathResult,
     this.components,
     this.reachableNodes,
+    this.reachableByNodes,
+    this.reachableAllNodes,
     this.sortedNodes,
     this.sourceNode,
     this.destinationNode,
     this.reachabilitySource,
+    this.reachableByTarget,
+    this.reachableAllCenter,
     required this.onNodeTap,
   });
 
@@ -2457,6 +2605,22 @@ class AlgorithmGraphPainter extends CustomPainter {
         }
         return Colors.grey.shade400;
 
+      case AlgorithmMode.reachableBy:
+        if (reachableByNodes != null &&
+            reachableByNodes!.contains(srcId) &&
+            reachableByNodes!.contains(dstId)) {
+          return Colors.green.shade600;
+        }
+        return Colors.grey.shade400;
+
+      case AlgorithmMode.reachableAll:
+        if (reachableAllNodes != null &&
+            reachableAllNodes!.contains(srcId) &&
+            reachableAllNodes!.contains(dstId)) {
+          return Colors.purple.shade600;
+        }
+        return Colors.grey.shade400;
+
       case AlgorithmMode.topologicalSort:
         return Colors.grey.shade400;
     }
@@ -2479,6 +2643,22 @@ class AlgorithmGraphPainter extends CustomPainter {
         if (reachableNodes != null &&
             reachableNodes!.contains(srcId) &&
             reachableNodes!.contains(dstId)) {
+          return 3.0;
+        }
+        return 1.0;
+
+      case AlgorithmMode.reachableBy:
+        if (reachableByNodes != null &&
+            reachableByNodes!.contains(srcId) &&
+            reachableByNodes!.contains(dstId)) {
+          return 3.0;
+        }
+        return 1.0;
+
+      case AlgorithmMode.reachableAll:
+        if (reachableAllNodes != null &&
+            reachableAllNodes!.contains(srcId) &&
+            reachableAllNodes!.contains(dstId)) {
           return 3.0;
         }
         return 1.0;
@@ -2515,6 +2695,20 @@ class AlgorithmGraphPainter extends CustomPainter {
         }
         return Colors.grey.shade300;
 
+      case AlgorithmMode.reachableBy:
+        if (nodeId == reachableByTarget) return Colors.red.shade600;
+        if (reachableByNodes?.contains(nodeId) == true) {
+          return Colors.green.shade400;
+        }
+        return Colors.grey.shade300;
+
+      case AlgorithmMode.reachableAll:
+        if (nodeId == reachableAllCenter) return Colors.orange.shade600;
+        if (reachableAllNodes?.contains(nodeId) == true) {
+          return Colors.purple.shade400;
+        }
+        return Colors.grey.shade300;
+
       case AlgorithmMode.topologicalSort:
         if (sortedNodes != null) {
           final index = sortedNodes!.indexOf(nodeId);
@@ -2539,6 +2733,14 @@ class AlgorithmGraphPainter extends CustomPainter {
         if (nodeId == reachabilitySource) return Colors.green.shade800;
         return Colors.blue.shade600;
 
+      case AlgorithmMode.reachableBy:
+        if (nodeId == reachableByTarget) return Colors.red.shade800;
+        return Colors.green.shade600;
+
+      case AlgorithmMode.reachableAll:
+        if (nodeId == reachableAllCenter) return Colors.orange.shade800;
+        return Colors.purple.shade600;
+
       default:
         return Colors.grey.shade600;
     }
@@ -2552,6 +2754,14 @@ class AlgorithmGraphPainter extends CustomPainter {
 
       case AlgorithmMode.reachability:
         if (nodeId == reachabilitySource) return 35.0;
+        return 30.0;
+
+      case AlgorithmMode.reachableBy:
+        if (nodeId == reachableByTarget) return 35.0;
+        return 30.0;
+
+      case AlgorithmMode.reachableAll:
+        if (nodeId == reachableAllCenter) return 35.0;
         return 30.0;
 
       default:
@@ -2633,10 +2843,14 @@ class AlgorithmGraphPainter extends CustomPainter {
         oldDelegate.pathResult != pathResult ||
         oldDelegate.components != components ||
         oldDelegate.reachableNodes != reachableNodes ||
+        oldDelegate.reachableByNodes != reachableByNodes ||
+        oldDelegate.reachableAllNodes != reachableAllNodes ||
         oldDelegate.sortedNodes != sortedNodes ||
         oldDelegate.sourceNode != sourceNode ||
         oldDelegate.destinationNode != destinationNode ||
-        oldDelegate.reachabilitySource != reachabilitySource;
+        oldDelegate.reachabilitySource != reachabilitySource ||
+        oldDelegate.reachableByTarget != reachableByTarget ||
+        oldDelegate.reachableAllCenter != reachableAllCenter;
   }
 
   @override

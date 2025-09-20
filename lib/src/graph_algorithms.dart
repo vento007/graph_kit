@@ -173,6 +173,118 @@ class GraphAlgorithms<T extends Node> {
     return reachable;
   }
 
+  /// Finds all nodes that can reach a given target node.
+  ///
+  /// This is the inverse of [reachableFrom] - it follows incoming edges
+  /// to find all nodes that have a path TO the target node.
+  ///
+  /// Returns a set containing all nodes that can reach the target node,
+  /// including the target node itself.
+  ///
+  /// Parameters:
+  /// - [nodeId]: The target node ID
+  /// - [edgeType]: Optional edge type filter
+  ///
+  /// Example:
+  /// ```dart
+  /// final canReachTarget = algorithms.reachableBy('target');
+  /// print('${canReachTarget.length} nodes can reach target');
+  /// ```
+  Set<String> reachableBy(String nodeId, {String? edgeType}) {
+    if (!graph.nodesById.containsKey(nodeId)) {
+      return <String>{};
+    }
+
+    final reachable = <String>{};
+    final stack = <String>[nodeId];
+
+    while (stack.isNotEmpty) {
+      final current = stack.removeLast();
+      if (reachable.contains(current)) continue;
+
+      reachable.add(current);
+
+      // Add all incoming neighbors
+      final incoming = graph.inn[current];
+      if (incoming != null) {
+        for (final edgeTypeKey in incoming.keys) {
+          if (edgeType == null || edgeTypeKey == edgeType) {
+            for (final neighbor in incoming[edgeTypeKey]!) {
+              if (!reachable.contains(neighbor)) {
+                stack.add(neighbor);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return reachable;
+  }
+
+  /// Finds all nodes connected to a given node in both directions.
+  ///
+  /// This combines [reachableFrom] and [reachableBy] to find all nodes
+  /// that are connected to the given node regardless of edge direction.
+  ///
+  /// Returns a set containing all nodes reachable from OR to the given node,
+  /// including the node itself.
+  ///
+  /// Parameters:
+  /// - [nodeId]: The center node ID
+  /// - [edgeType]: Optional edge type filter
+  ///
+  /// Example:
+  /// ```dart
+  /// final connected = algorithms.reachableAll('center');
+  /// print('${connected.length} nodes are connected to center');
+  /// ```
+  Set<String> reachableAll(String nodeId, {String? edgeType}) {
+    if (!graph.nodesById.containsKey(nodeId)) {
+      return <String>{};
+    }
+
+    final reachable = <String>{};
+    final stack = <String>[nodeId];
+
+    while (stack.isNotEmpty) {
+      final current = stack.removeLast();
+      if (reachable.contains(current)) continue;
+
+      reachable.add(current);
+
+      // Add all outgoing neighbors
+      final outgoing = graph.out[current];
+      if (outgoing != null) {
+        for (final edgeTypeKey in outgoing.keys) {
+          if (edgeType == null || edgeTypeKey == edgeType) {
+            for (final neighbor in outgoing[edgeTypeKey]!) {
+              if (!reachable.contains(neighbor)) {
+                stack.add(neighbor);
+              }
+            }
+          }
+        }
+      }
+
+      // Add all incoming neighbors
+      final incoming = graph.inn[current];
+      if (incoming != null) {
+        for (final edgeTypeKey in incoming.keys) {
+          if (edgeType == null || edgeTypeKey == edgeType) {
+            for (final neighbor in incoming[edgeTypeKey]!) {
+              if (!reachable.contains(neighbor)) {
+                stack.add(neighbor);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return reachable;
+  }
+
   /// Performs a topological sort of the graph.
   ///
   /// Returns nodes in topological order (dependencies before dependents).
