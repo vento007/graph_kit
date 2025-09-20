@@ -18,7 +18,87 @@ class GraphKitDemo extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const GraphVisualization(),
+      home: const DemoSelector(),
+    );
+  }
+}
+
+enum DemoMode {
+  patternQueries('Pattern Queries', 'Query graphs with Cypher-like patterns'),
+  algorithms('Graph Algorithms', 'Visualize shortest paths, components, and more');
+
+  const DemoMode(this.title, this.description);
+  final String title;
+  final String description;
+}
+
+class DemoSelector extends StatefulWidget {
+  const DemoSelector({super.key});
+
+  @override
+  State<DemoSelector> createState() => _DemoSelectorState();
+}
+
+class _DemoSelectorState extends State<DemoSelector> {
+  DemoMode currentMode = DemoMode.patternQueries;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Graph Kit Demo'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: DemoMode.values.map((mode) {
+                final isSelected = currentMode == mode;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ElevatedButton(
+                      onPressed: () => setState(() => currentMode = mode),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isSelected
+                            ? Theme.of(context).primaryColor
+                            : Colors.grey.shade200,
+                        foregroundColor: isSelected
+                            ? Colors.white
+                            : Colors.grey.shade700,
+                        elevation: isSelected ? 4 : 1,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            mode.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            mode.description,
+                            style: const TextStyle(fontSize: 10),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+      body: switch (currentMode) {
+        DemoMode.patternQueries => const GraphVisualization(),
+        DemoMode.algorithms => const AlgorithmsVisualization(),
+      },
     );
   }
 }
@@ -1514,4 +1594,1050 @@ extension OffsetExtension on Offset {
   }
 
   double get angle => math.atan2(dy, dx);
+}
+
+enum AlgorithmMode {
+  shortestPath('Shortest Path', 'Find optimal routes between nodes'),
+  connectedComponents('Connected Components', 'Group related nodes'),
+  reachability('Reachability', 'See what nodes can reach others'),
+  topologicalSort('Topological Sort', 'Order nodes by dependencies');
+
+  const AlgorithmMode(this.title, this.description);
+  final String title;
+  final String description;
+}
+
+class AlgorithmsVisualization extends StatefulWidget {
+  const AlgorithmsVisualization({super.key});
+
+  @override
+  State<AlgorithmsVisualization> createState() => _AlgorithmsVisualizationState();
+}
+
+class _AlgorithmsVisualizationState extends State<AlgorithmsVisualization> {
+  late Graph<Node> graph;
+  late GraphAlgorithms<Node> algorithms;
+  AlgorithmMode currentAlgorithm = AlgorithmMode.shortestPath;
+
+  // Shortest path state
+  String? sourceNode;
+  String? destinationNode;
+  ShortestPathResult? pathResult;
+
+  // Connected components state
+  List<Set<String>>? components;
+
+  // Reachability state
+  String? reachabilitySource;
+  Set<String>? reachableNodes;
+
+  // Topological sort state
+  List<String>? sortedNodes;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupDemoGraph();
+  }
+
+  void _setupDemoGraph() {
+    graph = Graph<Node>();
+
+    // Create a dependency graph that makes sense for topological sort
+    graph.addNode(Node(id: 'core', type: 'Package', label: 'Core'));
+    graph.addNode(Node(id: 'utils', type: 'Package', label: 'Utils'));
+    graph.addNode(Node(id: 'db', type: 'Package', label: 'Database'));
+    graph.addNode(Node(id: 'api', type: 'Package', label: 'API'));
+    graph.addNode(Node(id: 'ui', type: 'Package', label: 'UI'));
+    graph.addNode(Node(id: 'app', type: 'Package', label: 'App'));
+    graph.addNode(Node(id: 'tests', type: 'Package', label: 'Tests'));
+    graph.addNode(Node(id: 'isolated', type: 'Package', label: 'Legacy'));
+
+    // Add dependency edges (A DEPENDS_ON B means A needs B to be built first)
+    graph.addEdge('utils', 'DEPENDS_ON', 'core');    // utils needs core
+    graph.addEdge('db', 'DEPENDS_ON', 'core');       // database needs core
+    graph.addEdge('api', 'DEPENDS_ON', 'utils');     // api needs utils
+    graph.addEdge('api', 'DEPENDS_ON', 'db');        // api needs database
+    graph.addEdge('ui', 'DEPENDS_ON', 'utils');      // ui needs utils
+    graph.addEdge('app', 'DEPENDS_ON', 'api');       // app needs api
+    graph.addEdge('app', 'DEPENDS_ON', 'ui');        // app needs ui
+    graph.addEdge('tests', 'DEPENDS_ON', 'app');     // tests need app
+    // isolated has no dependencies (separate component)
+
+    algorithms = GraphAlgorithms(graph);
+    _updateResults();
+  }
+
+  void _updateResults() {
+    switch (currentAlgorithm) {
+      case AlgorithmMode.shortestPath:
+        if (sourceNode != null && destinationNode != null) {
+          pathResult = algorithms.shortestPath(sourceNode!, destinationNode!);
+        }
+      case AlgorithmMode.connectedComponents:
+        components = algorithms.connectedComponents();
+      case AlgorithmMode.reachability:
+        if (reachabilitySource != null) {
+          reachableNodes = algorithms.reachableFrom(reachabilitySource!);
+        }
+      case AlgorithmMode.topologicalSort:
+        try {
+          sortedNodes = algorithms.topologicalSort();
+        } catch (e) {
+          sortedNodes = null; // Graph has cycles
+        }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Algorithm selector
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+          ),
+          child: Row(
+            children: AlgorithmMode.values.map((mode) {
+              final isSelected = currentAlgorithm == mode;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        currentAlgorithm = mode;
+                        _updateResults();
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSelected
+                          ? Theme.of(context).primaryColor
+                          : Colors.white,
+                      foregroundColor: isSelected
+                          ? Colors.white
+                          : Colors.grey.shade800,
+                      elevation: isSelected ? 3 : 1,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          mode.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          mode.description,
+                          style: const TextStyle(fontSize: 9),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // Main content
+        Expanded(
+          child: Row(
+            children: [
+              // Left panel - Controls and results
+              Container(
+                width: 300,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border(right: BorderSide(color: Colors.grey.shade300)),
+                ),
+                child: _buildControlPanel(),
+              ),
+
+              // Right panel - Graph visualization
+              Expanded(
+                child: InteractiveViewer(
+                  boundaryMargin: const EdgeInsets.all(20),
+                  minScale: 0.5,
+                  maxScale: 3.0,
+                  child: GestureDetector(
+                    onTapDown: (details) {
+                      _handleTapOnGraph(details.localPosition);
+                    },
+                    child: CustomPaint(
+                      painter: AlgorithmGraphPainter(
+                        graph: graph,
+                        algorithmMode: currentAlgorithm,
+                        pathResult: pathResult,
+                        components: components,
+                        reachableNodes: reachableNodes,
+                        sortedNodes: sortedNodes,
+                        sourceNode: sourceNode,
+                        destinationNode: destinationNode,
+                        reachabilitySource: reachabilitySource,
+                        onNodeTap: _handleNodeTap,
+                      ),
+                      size: Size.infinite,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildControlPanel() {
+    switch (currentAlgorithm) {
+      case AlgorithmMode.shortestPath:
+        return _buildShortestPathControls();
+      case AlgorithmMode.connectedComponents:
+        return _buildConnectedComponentsControls();
+      case AlgorithmMode.reachability:
+        return _buildReachabilityControls();
+      case AlgorithmMode.topologicalSort:
+        return _buildTopologicalSortControls();
+    }
+  }
+
+  Widget _buildShortestPathControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Shortest Path',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          sourceNode == null
+              ? '1. Click a node to select SOURCE (green)'
+              : destinationNode == null
+                  ? '2. Click another node to select DESTINATION (red)'
+                  : 'Path calculated! Click any node to start over.',
+          style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+        ),
+        const SizedBox(height: 16),
+
+        if (sourceNode != null) ...[
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              border: Border.all(color: Colors.green.shade300),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              'Source: $sourceNode',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade800),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (destinationNode != null) ...[
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              border: Border.all(color: Colors.red.shade300),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              'Destination: $destinationNode',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade800),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        if (pathResult != null) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: pathResult!.found ? Colors.green.shade50 : Colors.red.shade50,
+              border: Border.all(
+                color: pathResult!.found ? Colors.green.shade300 : Colors.red.shade300,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  pathResult!.found ? 'Path Found!' : 'No Path',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: pathResult!.found ? Colors.green.shade800 : Colors.red.shade800,
+                  ),
+                ),
+                if (pathResult!.found) ...[
+                  const SizedBox(height: 8),
+                  Text('Route: ${pathResult!.path.join(' → ')}'),
+                  Text('Distance: ${pathResult!.distance}'),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: () {
+            setState(() {
+              sourceNode = null;
+              destinationNode = null;
+              pathResult = null;
+            });
+          },
+          child: const Text('Clear'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConnectedComponentsControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Connected Components',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text('Groups of nodes that are connected to each other.'),
+        const SizedBox(height: 16),
+
+        if (components != null) ...[
+          Text('Found ${components!.length} components:'),
+          const SizedBox(height: 8),
+          ...components!.asMap().entries.map((entry) {
+            final index = entry.key;
+            final component = entry.value;
+            final color = _getComponentColor(index);
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                border: Border.all(color: color),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Component ${index + 1}',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: color),
+                  ),
+                  Text('Nodes: {${component.join(', ')}}'),
+                  Text('Size: ${component.length} nodes'),
+                ],
+              ),
+            );
+          }),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildReachabilityControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Reachability Analysis',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text('Click a node to see all nodes reachable from it.'),
+        const SizedBox(height: 16),
+
+        if (reachabilitySource != null) ...[
+          Text('Source: $reachabilitySource', style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+
+          if (reachableNodes != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                border: Border.all(color: Colors.blue.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Reachable Nodes:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(reachableNodes!.join(', ')),
+                  const SizedBox(height: 8),
+                  Text('Total: ${reachableNodes!.length} nodes'),
+                ],
+              ),
+            ),
+          ],
+        ],
+
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: () {
+            setState(() {
+              reachabilitySource = null;
+              reachableNodes = null;
+            });
+          },
+          child: const Text('Clear'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTopologicalSortControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Topological Sort',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text('Shows build order - dependencies arranged in levels that can be built in parallel.'),
+        const SizedBox(height: 16),
+
+        if (sortedNodes != null) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              border: Border.all(color: Colors.blue.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '📊 Build Levels Layout:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+                Text('• Nodes arranged in columns by build level'),
+                Text('• Each column can be built in parallel'),
+                Text('• Dependencies flow left → right'),
+                Text('• No cycles = valid build order ✓'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              border: Border.all(color: Colors.green.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Sequential Build Order:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                ...sortedNodes!.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final node = entry.value;
+                  return Text('${index + 1}. $node');
+                }),
+              ],
+            ),
+          ),
+        ] else ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              border: Border.all(color: Colors.orange.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Cycle Detected!',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 4),
+                Text('This graph contains cycles, so topological sorting is not possible.'),
+                SizedBox(height: 8),
+                Text('Example: A depends on B, B depends on C, C depends on A'),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Color _getComponentColor(int index) {
+    final colors = [
+      Colors.red,
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.teal,
+      Colors.indigo,
+      Colors.pink,
+    ];
+    return colors[index % colors.length];
+  }
+
+  void _handleTapOnGraph(Offset position) {
+    // Get node positions from painter
+    final nodePositions = _getNodePositions();
+
+    // Check if tap hit any node
+    for (final entry in nodePositions.entries) {
+      final nodeId = entry.key;
+      final nodePos = entry.value;
+      final distance = (position - nodePos).distance;
+      if (distance <= 35) {
+        _handleNodeTap(nodeId);
+        return;
+      }
+    }
+  }
+
+  Map<String, Offset> _getNodePositions() {
+    // Use same logic as painter
+    if (currentAlgorithm == AlgorithmMode.topologicalSort && sortedNodes != null) {
+      return _getTopologicalLayoutForWidget();
+    } else {
+      return _getGridLayoutForWidget();
+    }
+  }
+
+  Map<String, Offset> _getGridLayoutForWidget() {
+    final positions = <String, Offset>{};
+    final nodeIds = graph.nodesById.keys.toList()..sort();
+
+    // Same layout logic as in painter
+    const double spacing = 120.0;
+    const double startX = 100.0;
+    const double startY = 100.0;
+    final int columns = (nodeIds.length <= 4) ? 2 : 3;
+
+    for (int i = 0; i < nodeIds.length; i++) {
+      final row = i ~/ columns;
+      final col = i % columns;
+      positions[nodeIds[i]] = Offset(
+        startX + col * spacing,
+        startY + row * spacing,
+      );
+    }
+
+    return positions;
+  }
+
+  Map<String, Offset> _getTopologicalLayoutForWidget() {
+    final positions = <String, Offset>{};
+    if (sortedNodes == null) return _getGridLayoutForWidget();
+
+    // Calculate build levels - same logic as painter
+    final levels = _calculateBuildLevelsForWidget();
+
+    const double levelSpacing = 150.0;
+    const double nodeSpacing = 80.0;
+    const double startX = 80.0;
+    const double startY = 60.0;
+
+    for (int levelIndex = 0; levelIndex < levels.length; levelIndex++) {
+      final nodesInLevel = levels[levelIndex];
+      final levelX = startX + levelIndex * levelSpacing;
+
+      final totalHeight = (nodesInLevel.length - 1) * nodeSpacing;
+      final levelStartY = startY + (400 - totalHeight) / 2;
+
+      for (int nodeIndex = 0; nodeIndex < nodesInLevel.length; nodeIndex++) {
+        final nodeId = nodesInLevel[nodeIndex];
+        positions[nodeId] = Offset(
+          levelX,
+          levelStartY + nodeIndex * nodeSpacing,
+        );
+      }
+    }
+
+    return positions;
+  }
+
+  List<List<String>> _calculateBuildLevelsForWidget() {
+    if (sortedNodes == null) return [];
+
+    final levels = <List<String>>[];
+    final nodeLevel = <String, int>{};
+
+    for (final nodeId in sortedNodes!) {
+      int maxDepLevel = -1;
+
+      final incoming = graph.inn[nodeId];
+      if (incoming != null) {
+        for (final edgeType in incoming.keys) {
+          for (final depNode in incoming[edgeType]!) {
+            final depLevel = nodeLevel[depNode] ?? 0;
+            maxDepLevel = math.max(maxDepLevel, depLevel);
+          }
+        }
+      }
+
+      final thisLevel = maxDepLevel + 1;
+      nodeLevel[nodeId] = thisLevel;
+
+      while (levels.length <= thisLevel) {
+        levels.add(<String>[]);
+      }
+
+      levels[thisLevel].add(nodeId);
+    }
+
+    return levels;
+  }
+
+  void _handleNodeTap(String nodeId) {
+    setState(() {
+      switch (currentAlgorithm) {
+        case AlgorithmMode.shortestPath:
+          if (sourceNode == null) {
+            sourceNode = nodeId;
+          } else if (destinationNode == null && nodeId != sourceNode) {
+            destinationNode = nodeId;
+          } else {
+            sourceNode = nodeId;
+            destinationNode = null;
+            pathResult = null;
+          }
+        case AlgorithmMode.reachability:
+          reachabilitySource = nodeId;
+        case AlgorithmMode.connectedComponents:
+        case AlgorithmMode.topologicalSort:
+          // No interaction needed
+          break;
+      }
+      _updateResults();
+    });
+  }
+}
+
+class AlgorithmGraphPainter extends CustomPainter {
+  final Graph<Node> graph;
+  final AlgorithmMode algorithmMode;
+  final ShortestPathResult? pathResult;
+  final List<Set<String>>? components;
+  final Set<String>? reachableNodes;
+  final List<String>? sortedNodes;
+  final String? sourceNode;
+  final String? destinationNode;
+  final String? reachabilitySource;
+  final Function(String) onNodeTap;
+
+  AlgorithmGraphPainter({
+    required this.graph,
+    required this.algorithmMode,
+    this.pathResult,
+    this.components,
+    this.reachableNodes,
+    this.sortedNodes,
+    this.sourceNode,
+    this.destinationNode,
+    this.reachabilitySource,
+    required this.onNodeTap,
+  });
+
+  // Layout nodes based on algorithm mode
+  Map<String, Offset> get nodePositions {
+    if (algorithmMode == AlgorithmMode.topologicalSort && sortedNodes != null) {
+      return _getTopologicalLayout();
+    } else {
+      return _getGridLayout();
+    }
+  }
+
+  Map<String, Offset> _getGridLayout() {
+    final positions = <String, Offset>{};
+    final nodeIds = graph.nodesById.keys.toList()..sort();
+
+    // Arrange in a grid
+    const double spacing = 120.0;
+    const double startX = 100.0;
+    const double startY = 100.0;
+    final int columns = (nodeIds.length <= 4) ? 2 : 3;
+
+    for (int i = 0; i < nodeIds.length; i++) {
+      final row = i ~/ columns;
+      final col = i % columns;
+      positions[nodeIds[i]] = Offset(
+        startX + col * spacing,
+        startY + row * spacing,
+      );
+    }
+
+    return positions;
+  }
+
+  Map<String, Offset> _getTopologicalLayout() {
+    final positions = <String, Offset>{};
+    if (sortedNodes == null) return _getGridLayout();
+
+    // Calculate build levels - nodes that can be built in parallel
+    final levels = _calculateBuildLevels();
+
+    const double levelSpacing = 150.0;  // Horizontal spacing between levels
+    const double nodeSpacing = 80.0;   // Vertical spacing between nodes in same level
+    const double startX = 80.0;
+    const double startY = 60.0;
+
+    for (int levelIndex = 0; levelIndex < levels.length; levelIndex++) {
+      final nodesInLevel = levels[levelIndex];
+      final levelX = startX + levelIndex * levelSpacing;
+
+      // Center nodes vertically in their level
+      final totalHeight = (nodesInLevel.length - 1) * nodeSpacing;
+      final levelStartY = startY + (400 - totalHeight) / 2; // Center in available space
+
+      for (int nodeIndex = 0; nodeIndex < nodesInLevel.length; nodeIndex++) {
+        final nodeId = nodesInLevel[nodeIndex];
+        positions[nodeId] = Offset(
+          levelX,
+          levelStartY + nodeIndex * nodeSpacing,
+        );
+      }
+    }
+
+    return positions;
+  }
+
+  List<List<String>> _calculateBuildLevels() {
+    if (sortedNodes == null) return [];
+
+    final levels = <List<String>>[];
+    final nodeLevel = <String, int>{};
+
+    // Calculate the level of each node based on its dependencies
+    for (final nodeId in sortedNodes!) {
+      int maxDepLevel = -1;
+
+      // Check incoming dependencies (nodes this one depends on)
+      final incoming = graph.inn[nodeId];
+      if (incoming != null) {
+        for (final edgeType in incoming.keys) {
+          for (final depNode in incoming[edgeType]!) {
+            final depLevel = nodeLevel[depNode] ?? 0;
+            maxDepLevel = math.max(maxDepLevel, depLevel);
+          }
+        }
+      }
+
+      final thisLevel = maxDepLevel + 1;
+      nodeLevel[nodeId] = thisLevel;
+
+      // Ensure we have enough levels
+      while (levels.length <= thisLevel) {
+        levels.add(<String>[]);
+      }
+
+      levels[thisLevel].add(nodeId);
+    }
+
+    return levels;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _drawEdges(canvas);
+    _drawNodes(canvas);
+  }
+
+  void _drawEdges(Canvas canvas) {
+    final paint = Paint()
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    for (final srcId in graph.out.keys) {
+      final srcPos = nodePositions[srcId];
+      if (srcPos == null) continue;
+
+      final edgesByType = graph.out[srcId]!;
+      for (final edgeType in edgesByType.keys) {
+        final dstIds = edgesByType[edgeType]!;
+        for (final dstId in dstIds) {
+          final dstPos = nodePositions[dstId];
+          if (dstPos == null) continue;
+
+          // Color edges based on algorithm mode
+          paint.color = _getEdgeColor(srcId, dstId);
+          paint.strokeWidth = _getEdgeWidth(srcId, dstId);
+
+          _drawArrow(canvas, srcPos, dstPos, paint);
+        }
+      }
+    }
+  }
+
+  void _drawNodes(Canvas canvas) {
+    for (final node in graph.nodesById.values) {
+      final pos = nodePositions[node.id];
+      if (pos == null) continue;
+
+      final paint = Paint()..style = PaintingStyle.fill;
+      final borderPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3;
+
+      // Color nodes based on algorithm mode and state
+      final nodeColor = _getNodeColor(node.id);
+      final borderColor = _getNodeBorderColor(node.id);
+      final radius = _getNodeRadius(node.id);
+
+      paint.color = nodeColor;
+      borderPaint.color = borderColor;
+
+      // Draw node
+      canvas.drawCircle(pos, radius, paint);
+      canvas.drawCircle(pos, radius, borderPaint);
+
+      // Draw node label
+      _drawText(canvas, node.id, pos, Colors.white);
+    }
+  }
+
+  Color _getEdgeColor(String srcId, String dstId) {
+    switch (algorithmMode) {
+      case AlgorithmMode.shortestPath:
+        if (pathResult?.found == true) {
+          final path = pathResult!.path;
+          for (int i = 0; i < path.length - 1; i++) {
+            if (path[i] == srcId && path[i + 1] == dstId) {
+              return Colors.red.shade600; // Path edge
+            }
+          }
+        }
+        return Colors.grey.shade400;
+
+      case AlgorithmMode.connectedComponents:
+        if (components != null) {
+          for (int i = 0; i < components!.length; i++) {
+            final component = components![i];
+            if (component.contains(srcId) && component.contains(dstId)) {
+              return _getComponentColor(i);
+            }
+          }
+        }
+        return Colors.grey.shade400;
+
+      case AlgorithmMode.reachability:
+        if (reachableNodes != null &&
+            reachableNodes!.contains(srcId) &&
+            reachableNodes!.contains(dstId)) {
+          return Colors.blue.shade600;
+        }
+        return Colors.grey.shade400;
+
+      case AlgorithmMode.topologicalSort:
+        return Colors.grey.shade400;
+    }
+  }
+
+  double _getEdgeWidth(String srcId, String dstId) {
+    switch (algorithmMode) {
+      case AlgorithmMode.shortestPath:
+        if (pathResult?.found == true) {
+          final path = pathResult!.path;
+          for (int i = 0; i < path.length - 1; i++) {
+            if (path[i] == srcId && path[i + 1] == dstId) {
+              return 4.0; // Thick path edge
+            }
+          }
+        }
+        return 2.0;
+
+      case AlgorithmMode.reachability:
+        if (reachableNodes != null &&
+            reachableNodes!.contains(srcId) &&
+            reachableNodes!.contains(dstId)) {
+          return 3.0;
+        }
+        return 1.0;
+
+      default:
+        return 2.0;
+    }
+  }
+
+  Color _getNodeColor(String nodeId) {
+    switch (algorithmMode) {
+      case AlgorithmMode.shortestPath:
+        if (nodeId == sourceNode) return Colors.green.shade600;
+        if (nodeId == destinationNode) return Colors.red.shade600;
+        if (pathResult?.found == true && pathResult!.path.contains(nodeId)) {
+          return Colors.orange.shade600;
+        }
+        return Colors.blue.shade300;
+
+      case AlgorithmMode.connectedComponents:
+        if (components != null) {
+          for (int i = 0; i < components!.length; i++) {
+            if (components![i].contains(nodeId)) {
+              return _getComponentColor(i);
+            }
+          }
+        }
+        return Colors.grey.shade300;
+
+      case AlgorithmMode.reachability:
+        if (nodeId == reachabilitySource) return Colors.green.shade600;
+        if (reachableNodes?.contains(nodeId) == true) {
+          return Colors.blue.shade400;
+        }
+        return Colors.grey.shade300;
+
+      case AlgorithmMode.topologicalSort:
+        if (sortedNodes != null) {
+          final index = sortedNodes!.indexOf(nodeId);
+          if (index >= 0) {
+            // Color gradient based on position in sort order
+            final ratio = index / (sortedNodes!.length - 1);
+            return Color.lerp(Colors.green.shade600, Colors.red.shade600, ratio)!;
+          }
+        }
+        return Colors.grey.shade300;
+    }
+  }
+
+  Color _getNodeBorderColor(String nodeId) {
+    switch (algorithmMode) {
+      case AlgorithmMode.shortestPath:
+        if (nodeId == sourceNode) return Colors.green.shade800;
+        if (nodeId == destinationNode) return Colors.red.shade800;
+        return Colors.blue.shade600;
+
+      case AlgorithmMode.reachability:
+        if (nodeId == reachabilitySource) return Colors.green.shade800;
+        return Colors.blue.shade600;
+
+      default:
+        return Colors.grey.shade600;
+    }
+  }
+
+  double _getNodeRadius(String nodeId) {
+    switch (algorithmMode) {
+      case AlgorithmMode.shortestPath:
+        if (nodeId == sourceNode || nodeId == destinationNode) return 35.0;
+        return 30.0;
+
+      case AlgorithmMode.reachability:
+        if (nodeId == reachabilitySource) return 35.0;
+        return 30.0;
+
+      default:
+        return 30.0;
+    }
+  }
+
+  Color _getComponentColor(int index) {
+    final colors = [
+      Colors.red.shade400,
+      Colors.blue.shade400,
+      Colors.green.shade400,
+      Colors.orange.shade400,
+      Colors.purple.shade400,
+      Colors.teal.shade400,
+      Colors.indigo.shade400,
+      Colors.pink.shade400,
+    ];
+    return colors[index % colors.length];
+  }
+
+  void _drawArrow(Canvas canvas, Offset start, Offset end, Paint paint) {
+    // Adjust start and end points to node edges
+    final direction = (end - start).normalized();
+    final adjustedStart = start + direction * 30;
+    final adjustedEnd = end - direction * 30;
+
+    // Draw line
+    canvas.drawLine(adjustedStart, adjustedEnd, paint);
+
+    // Draw arrowhead
+    final arrowLength = 12.0;
+    final arrowAngle = math.pi / 6;
+
+    final arrowPoint1 = adjustedEnd + Offset(
+      -arrowLength * math.cos(-arrowAngle + direction.angle),
+      -arrowLength * math.sin(-arrowAngle + direction.angle),
+    );
+
+    final arrowPoint2 = adjustedEnd + Offset(
+      -arrowLength * math.cos(arrowAngle + direction.angle),
+      -arrowLength * math.sin(arrowAngle + direction.angle),
+    );
+
+    final arrowPath = Path()
+      ..moveTo(adjustedEnd.dx, adjustedEnd.dy)
+      ..lineTo(arrowPoint1.dx, arrowPoint1.dy)
+      ..lineTo(arrowPoint2.dx, arrowPoint2.dy)
+      ..close();
+
+    final oldStyle = paint.style;
+    paint.style = PaintingStyle.fill;
+    canvas.drawPath(arrowPath, paint);
+    paint.style = oldStyle;
+  }
+
+  void _drawText(Canvas canvas, String text, Offset position, Color color) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      position - Offset(textPainter.width / 2, textPainter.height / 2),
+    );
+  }
+
+  @override
+  bool shouldRepaint(AlgorithmGraphPainter oldDelegate) {
+    return oldDelegate.algorithmMode != algorithmMode ||
+        oldDelegate.pathResult != pathResult ||
+        oldDelegate.components != components ||
+        oldDelegate.reachableNodes != reachableNodes ||
+        oldDelegate.sortedNodes != sortedNodes ||
+        oldDelegate.sourceNode != sourceNode ||
+        oldDelegate.destinationNode != destinationNode ||
+        oldDelegate.reachabilitySource != reachabilitySource;
+  }
+
+  @override
+  bool hitTest(Offset position) => true;
 }
