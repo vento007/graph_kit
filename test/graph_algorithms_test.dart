@@ -484,6 +484,138 @@ void main() {
         expect(blocksSort.indexOf('c'), lessThan(blocksSort.indexOf('b')));
       });
     });
+
+    group('Betweenness Centrality', () {
+      test('calculates centrality for simple path', () {
+        // a -> b -> c (b is the bridge)
+        graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
+        graph.addNode(Node(id: 'b', type: 'Node', label: 'B'));
+        graph.addNode(Node(id: 'c', type: 'Node', label: 'C'));
+
+        graph.addEdge('a', 'CONNECTS', 'b');
+        graph.addEdge('b', 'CONNECTS', 'c');
+
+        final centrality = algorithms.betweennessCentrality();
+
+        expect(centrality['a'], equals(0.0)); // not a bridge
+        expect(centrality['b'], equals(1.0)); // perfect bridge
+        expect(centrality['c'], equals(0.0)); // not a bridge
+      });
+
+      test('calculates centrality for star pattern', () {
+        // a -> center <- b
+        //      |
+        //      v
+        //      c
+        graph.addNode(Node(id: 'center', type: 'Node', label: 'Center'));
+        graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
+        graph.addNode(Node(id: 'b', type: 'Node', label: 'B'));
+        graph.addNode(Node(id: 'c', type: 'Node', label: 'C'));
+
+        graph.addEdge('a', 'CONNECTS', 'center');
+        graph.addEdge('b', 'CONNECTS', 'center');
+        graph.addEdge('center', 'CONNECTS', 'c');
+
+        final centrality = algorithms.betweennessCentrality();
+
+        expect(centrality['center'], greaterThan(0.5)); // high centrality
+        expect(centrality['a'], equals(0.0));
+        expect(centrality['b'], equals(0.0));
+        expect(centrality['c'], equals(0.0));
+      });
+
+      test('handles disconnected graph', () {
+        graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
+        graph.addNode(Node(id: 'b', type: 'Node', label: 'B'));
+
+        final centrality = algorithms.betweennessCentrality();
+
+        expect(centrality['a'], equals(0.0));
+        expect(centrality['b'], equals(0.0));
+      });
+
+      test('respects edge type filter', () {
+        graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
+        graph.addNode(Node(id: 'b', type: 'Node', label: 'B'));
+        graph.addNode(Node(id: 'c', type: 'Node', label: 'C'));
+
+        graph.addEdge('a', 'TYPE1', 'b');
+        graph.addEdge('b', 'TYPE2', 'c');
+
+        final type1Centrality = algorithms.betweennessCentrality(edgeType: 'TYPE1');
+        final type2Centrality = algorithms.betweennessCentrality(edgeType: 'TYPE2');
+
+        expect(type1Centrality['b'], equals(0.0)); // no bridge for TYPE1 only
+        expect(type2Centrality['b'], equals(0.0)); // no bridge for TYPE2 only
+      });
+    });
+
+    group('Closeness Centrality', () {
+      test('calculates centrality for simple path', () {
+        // a -> b -> c (b is closest to all)
+        graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
+        graph.addNode(Node(id: 'b', type: 'Node', label: 'B'));
+        graph.addNode(Node(id: 'c', type: 'Node', label: 'C'));
+
+        graph.addEdge('a', 'CONNECTS', 'b');
+        graph.addEdge('b', 'CONNECTS', 'c');
+
+        final centrality = algorithms.closenessCentrality();
+
+        expect(centrality['b'], equals(1.0)); // most central
+        expect(centrality['a'], lessThan(1.0));
+        expect(centrality['c'], lessThan(1.0));
+      });
+
+      test('calculates centrality for star pattern', () {
+        // a -> center <- b
+        //      |
+        //      v
+        //      c
+        graph.addNode(Node(id: 'center', type: 'Node', label: 'Center'));
+        graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
+        graph.addNode(Node(id: 'b', type: 'Node', label: 'B'));
+        graph.addNode(Node(id: 'c', type: 'Node', label: 'C'));
+
+        graph.addEdge('a', 'CONNECTS', 'center');
+        graph.addEdge('b', 'CONNECTS', 'center');
+        graph.addEdge('center', 'CONNECTS', 'c');
+
+        final centrality = algorithms.closenessCentrality();
+
+        expect(centrality['center'], equals(1.0)); // most central
+        expect(centrality['a'], lessThan(1.0));
+        expect(centrality['b'], lessThan(1.0));
+        expect(centrality['c'], lessThan(1.0));
+      });
+
+      test('handles disconnected graph', () {
+        graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
+        graph.addNode(Node(id: 'b', type: 'Node', label: 'B'));
+
+        final centrality = algorithms.closenessCentrality();
+
+        expect(centrality['a'], equals(0.0));
+        expect(centrality['b'], equals(0.0));
+      });
+
+      test('respects edge type filter', () {
+        graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
+        graph.addNode(Node(id: 'b', type: 'Node', label: 'B'));
+        graph.addNode(Node(id: 'c', type: 'Node', label: 'C'));
+
+        graph.addEdge('a', 'TYPE1', 'b');
+        graph.addEdge('b', 'TYPE1', 'c');
+        graph.addEdge('a', 'TYPE2', 'c');
+
+        final type1Centrality = algorithms.closenessCentrality(edgeType: 'TYPE1');
+        final type2Centrality = algorithms.closenessCentrality(edgeType: 'TYPE2');
+
+        expect(type1Centrality['b'], equals(1.0)); // b is central for TYPE1
+        expect(type2Centrality['a'], greaterThan(0.0)); // a can reach c directly
+        expect(type2Centrality['b'], equals(0.0)); // b is isolated for TYPE2
+      });
+    });
   });
 }
 
