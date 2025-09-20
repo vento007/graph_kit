@@ -1,4 +1,27 @@
 
+## 0.6.6
+
+### Added
+- **PetitParser implementation** - New experimental pattern query parser using PetitParser
+- Side-by-side coexistence with original parser - both implementations available
+- Comprehensive test suite ensuring 100% parity between parsers
+- Demo app integration with PetitParser for testing
+
+### Technical Details
+- New `PetitPatternQuery` class in `src/pattern_query_petit.dart`
+- Full support for all existing pattern syntax:
+  - Node types and label filters
+  - Forward and backward arrows
+  - Multi-hop patterns
+  - Complex nested queries
+- Identical API to original `PatternQuery` for drop-in compatibility
+
+### Notes
+- Original `PatternQuery` remains the default implementation
+- PetitParser implementation is experimental and subject to testing
+- Future versions will transition to PetitParser as primary implementation
+- No breaking changes to existing code
+
 ## 0.6.5
 
 • Graph algorithms module with shortest path, connected components, reachability, and topological sort
