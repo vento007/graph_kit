@@ -1,4 +1,3 @@
-
 ## 0.6.5
 
 • Graph algorithms module with shortest path, connected components, reachability, and topological sort
@@ -8,7 +7,7 @@
 
 • Fix: bracket-aware pattern parsing and relaxed edge-type handling for special characters in `PatternQuery`.
 
-## 0.6.3_+1
+## 0.6.3+1
 
 • Fix: changed topics for package SEO
 
