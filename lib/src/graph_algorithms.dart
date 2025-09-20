@@ -458,5 +458,111 @@ class GraphAlgorithms<T extends Node> {
       }
     }
   }
+
+  /// Calculates betweenness centrality for all nodes.
+  ///
+  /// Betweenness centrality measures how often a node acts as a bridge along
+  /// the shortest paths between other nodes. Nodes with high betweenness
+  /// centrality are critical connection points in the network.
+  ///
+  /// Returns a map from node ID to centrality score (0.0 to 1.0).
+  ///
+  /// Example:
+  /// ```dart
+  /// final centrality = algorithms.betweennessCentrality();
+  /// final bridges = centrality.entries
+  ///     .where((e) => e.value > 0.5)
+  ///     .map((e) => e.key)
+  ///     .toList();
+  /// ```
+  Map<String, double> betweennessCentrality({String? edgeType}) {
+    final nodes = graph.nodesById.keys.toList();
+    final centrality = <String, double>{};
+
+    // Initialize centrality scores
+    for (final node in nodes) {
+      centrality[node] = 0.0;
+    }
+
+    // For each pair of nodes, find shortest paths and count how many
+    // pass through each intermediate node
+    for (int i = 0; i < nodes.length; i++) {
+      for (int j = i + 1; j < nodes.length; j++) {
+        final source = nodes[i];
+        final target = nodes[j];
+
+        final pathResult = shortestPath(source, target, edgeType: edgeType);
+        if (pathResult.path.isNotEmpty && pathResult.path.length > 2) {
+          // Count intermediate nodes (exclude source and target)
+          for (int k = 1; k < pathResult.path.length - 1; k++) {
+            final intermediateNode = pathResult.path[k];
+            centrality[intermediateNode] = centrality[intermediateNode]! + 1.0;
+          }
+        }
+      }
+    }
+
+    // Normalize by the maximum possible betweenness
+    final maxPossible = (nodes.length - 1) * (nodes.length - 2) / 2;
+    if (maxPossible > 0) {
+      for (final node in nodes) {
+        centrality[node] = centrality[node]! / maxPossible;
+      }
+    }
+
+    return centrality;
+  }
+
+  /// Calculates closeness centrality for all nodes.
+  ///
+  /// Closeness centrality measures how close a node is to all other nodes
+  /// in the network. Nodes with high closeness centrality can reach other
+  /// nodes via shorter paths.
+  ///
+  /// Returns a map from node ID to centrality score (0.0 to 1.0).
+  ///
+  /// Example:
+  /// ```dart
+  /// final centrality = algorithms.closenessCentrality();
+  /// final mostCentral = centrality.entries
+  ///     .reduce((a, b) => a.value > b.value ? a : b)
+  ///     .key;
+  /// ```
+  Map<String, double> closenessCentrality({String? edgeType}) {
+    final nodes = graph.nodesById.keys.toList();
+    final centrality = <String, double>{};
+
+    for (final sourceNode in nodes) {
+      double totalDistance = 0.0;
+      int reachableNodes = 0;
+
+      for (final targetNode in nodes) {
+        if (sourceNode != targetNode) {
+          final pathResult = shortestPath(sourceNode, targetNode, edgeType: edgeType);
+          if (pathResult.path.isNotEmpty) {
+            totalDistance += pathResult.distance;
+            reachableNodes++;
+          }
+        }
+      }
+
+      // Closeness is reciprocal of average distance
+      if (reachableNodes > 0 && totalDistance > 0) {
+        centrality[sourceNode] = reachableNodes / totalDistance;
+      } else {
+        centrality[sourceNode] = 0.0;
+      }
+    }
+
+    // Normalize to 0-1 range
+    final maxCentrality = centrality.values.isEmpty ? 0.0 : centrality.values.reduce((a, b) => a > b ? a : b);
+    if (maxCentrality > 0) {
+      for (final node in nodes) {
+        centrality[node] = centrality[node]! / maxCentrality;
+      }
+    }
+
+    return centrality;
+  }
 }
 

@@ -96,6 +96,7 @@ class PathMatch {
 
 /// Grammar definition for Cypher-like patterns
 class CypherPatternGrammar extends GrammarDefinition {
+  @override
   Parser start() => ref0(pattern).end();
 
   Parser pattern() => ref0(segment) & (ref0(connection) & ref0(segment)).star();

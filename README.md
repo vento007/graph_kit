@@ -316,6 +316,14 @@ print('Can reach core: $reachableBy'); // {app, utils, core}
 // Check all connected nodes (bidirectional)
 final reachableAll = algorithms.reachableAll('utils');
 print('Connected to utils: $reachableAll'); // {app, utils, core}
+
+// Find critical bridge nodes
+final betweenness = algorithms.betweennessCentrality();
+print('Bridge nodes: ${betweenness.entries.where((e) => e.value > 0.3).map((e) => e.key)}');
+
+// Find communication hubs
+final closeness = algorithms.closenessCentrality();
+print('Most central: ${closeness.entries.reduce((a, b) => a.value > b.value ? a : b).key}');
 ```
 
 

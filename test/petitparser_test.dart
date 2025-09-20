@@ -142,7 +142,7 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
 
       if (result is Failure) {
         print('Failed at position: ${result.position}');
-        final context = complexPattern.substring(0, result.position) + ' <-- HERE --> ' + complexPattern.substring(result.position);
+        final context = '${complexPattern.substring(0, result.position)} <-- HERE --> ${complexPattern.substring(result.position)}';
         print('Context: $context');
       } else {
         print('Parse tree: ${result.value}');

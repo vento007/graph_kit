@@ -1,4 +1,10 @@
 
+## 0.6.8
+
+### Added
+- Betweenness centrality algorithm to identify critical bridge nodes
+- Closeness centrality algorithm to find communication hubs
+
 ## 0.6.7
 
 ### Added
@@ -38,7 +44,7 @@
 
 • Fix: bracket-aware pattern parsing and relaxed edge-type handling for special characters in `PatternQuery`.
 
-## 0.6.3_+1
+## 0.6.3+1
 
 • Fix: changed topics for package SEO
 
