@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:graph_kit/graph_kit.dart';
+import 'package:graph_kit/src/pattern_query_petit.dart' as petit;
 import 'dart:math' as math;
 
 void main() {
@@ -112,11 +113,11 @@ class GraphVisualization extends StatefulWidget {
 
 class _GraphVisualizationState extends State<GraphVisualization> {
   late Graph<Node> graph;
-  late PatternQuery<Node> query;
+  late petit.PetitPatternQuery query;
   final TextEditingController _queryController = TextEditingController();
   Map<String, Set<String>>? queryResults;
   List<Map<String, String>>? queryRows;
-  List<PathMatch>? queryPaths;
+  List<petit.PathMatch>? queryPaths;
   String? selectedNodeId;
   bool _showCode = true;
   late String _graphSetupCode;
@@ -223,7 +224,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     graph.addEdge('marketing', 'ASSIGNED_TO', 'campaign');
     graph.addEdge('alice', 'LEADS', 'web_app');
 
-    query = PatternQuery(graph);
+    query = petit.PetitPatternQuery(graph);
     _graphSetupCode = _buildGraphSetupCode();
   }
 
@@ -877,7 +878,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
   }
 
   // --- Helper to build simple, readable path description ---
-  String _buildSimplePathDescription(PathMatch path) {
+  String _buildSimplePathDescription(petit.PathMatch path) {
     final orderedVars = _orderPathVariables(path.nodes.keys.toList(), path);
     final parts = <String>[];
 
@@ -892,7 +893,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
   }
 
   // --- Helper to build detailed path description ---
-  String buildPathDescription(PathMatch path) {
+  String buildPathDescription(petit.PathMatch path) {
     final parts = <String>[];
 
     // Get the variables in a logical order for path display
@@ -921,7 +922,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     return parts.join('');
   }
 
-  List<String> _orderPathVariables(List<String> variables, PathMatch path) {
+  List<String> _orderPathVariables(List<String> variables, petit.PathMatch path) {
     // Common ordering patterns
     final priority = {
       'person': 0,
@@ -949,7 +950,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
     return variables;
   }
 
-  String? _findEdgeTypeBetween(PathMatch path, String fromVar, String toVar) {
+  String? _findEdgeTypeBetween(petit.PathMatch path, String fromVar, String toVar) {
     final fromId = path.nodes[fromVar];
     final toId = path.nodes[toVar];
 
