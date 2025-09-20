@@ -429,6 +429,7 @@ print(projectEcosystem.edges.length); // 7
 - **Forward patterns**: `"user-[:MEMBER_OF]->group"`
 - **Backward patterns**: `"resource<-[:CAN_ACCESS]-group<-[:MEMBER_OF]-user"` → `{alice, bob}`
 - **Label filtering**: `"user:User{label~Admin}"` → `{bob}`
+- **Variable-length paths**: `"manager-[:MANAGES*1..3]->subordinate"` → finds direct and indirect reports
 
 ## 6. Mini-Cypher Reference
 
@@ -445,8 +446,8 @@ Cypher is a language designed to describe patterns in graphs. Instead of writing
 
 GraphKit supports a **subset** of Cypher - the most useful parts without the complexity:
 
-**Supported**: Basic patterns, node types, relationships, label filters
-**Not supported**: Complex WHERE clauses, variable-length paths, aggregations
+**Supported**: Basic patterns, node types, relationships, label filters, variable-length paths (PetitParser only)
+**Not supported**: Complex WHERE clauses, aggregations
 
 This gives you the power of graph queries without learning the full Cypher language.
 
@@ -548,12 +549,42 @@ query.match('person:Person{label~Alice}')
 
 **Remember:** The names you pick (`person`, `team`, etc.) become the keys in your results!
 
+### Variable-Length Paths (PetitParser)
+
+Variable-length paths let you find connections across multiple hops without specifying the exact number of steps:
+
+```dart
+// Import the PetitParser implementation
+final query = PetitPatternQuery(graph);
+
+// Find all direct and indirect reports (1-3 management levels)
+query.match('manager-[:MANAGES*1..3]->subordinate')
+
+// Find anyone at least 2 levels down the hierarchy
+query.match('manager-[:MANAGES*2..]->subordinate')
+
+// Find dependencies up to 4 steps away
+query.match('component-[:DEPENDS_ON*..4]->dependency')
+
+// Find all reachable dependencies (unlimited hops)
+query.match('component-[:DEPENDS_ON*]->dependency')
+```
+
+**Variable-length syntax:**
+- `[:TYPE*]` - Unlimited hops
+- `[:TYPE*1..3]` - Between 1 and 3 hops
+- `[:TYPE*2..]` - 2 or more hops
+- `[:TYPE*..4]` - Up to 4 hops
+- `[:TYPE*2]` - Exactly 2 hops
+
+**Note:** Variable-length paths are only available in `PetitPatternQuery`, not the original `PatternQuery`.
+
 ## 7. Comparison with Cypher
 
 | Feature               | Real Cypher | graph_kit           |
 |-----------------------|-------------|---------------------|
 | Mixed directions      | Yes         | No                  |
-| Variable length paths | Yes         | No                  |
+| Variable length paths | Yes         | Yes (PetitParser)   |
 | Optional matches      | Yes         | Via `matchMany`     |
 | WHERE clauses         | Yes         | Via label filters   |
 

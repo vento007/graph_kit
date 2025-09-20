@@ -3,6 +3,46 @@ import 'package:petitparser/petitparser.dart';
 import 'graph.dart';
 import 'node.dart';
 
+/// Represents variable-length relationship specifications.
+class VariableLengthSpec {
+  /// Minimum number of hops (null means no minimum)
+  final int? minHops;
+
+  /// Maximum number of hops (null means no maximum)
+  final int? maxHops;
+
+  const VariableLengthSpec({this.minHops, this.maxHops});
+
+  /// Returns true if this represents unlimited hops (*)
+  bool get isUnlimited => minHops == null && maxHops == null;
+
+  /// Returns the effective maximum hops for path enumeration
+  int get effectiveMaxHops => maxHops ?? 10; // Default reasonable limit
+
+  /// Returns the effective minimum hops
+  int get effectiveMinHops => minHops ?? 1;
+
+  @override
+  String toString() {
+    if (isUnlimited) return '*';
+    if (minHops != null && maxHops != null) return '*$minHops..$maxHops';
+    if (minHops != null) return '*$minHops..';
+    if (maxHops != null) return '*..$maxHops';
+    return '*';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VariableLengthSpec &&
+          runtimeType == other.runtimeType &&
+          minHops == other.minHops &&
+          maxHops == other.maxHops;
+
+  @override
+  int get hashCode => minHops.hashCode ^ maxHops.hashCode;
+}
+
 /// Represents an edge in a path result, containing connection information.
 class PathEdge {
   /// Source node ID
@@ -13,6 +53,9 @@ class PathEdge {
 
   /// Edge type (e.g., 'WORKS_FOR', 'MANAGES')
   final String type;
+
+  /// Variable-length specification if this is a variable-length edge
+  final VariableLengthSpec? variableLength;
 
   /// Variable name for source node from pattern (e.g., 'person')
   final String fromVariable;
@@ -26,10 +69,14 @@ class PathEdge {
     required this.type,
     required this.fromVariable,
     required this.toVariable,
+    this.variableLength,
   });
 
   @override
-  String toString() => '$fromVariable($from) -[:$type]-> $toVariable($to)';
+  String toString() {
+    final vlStr = variableLength != null ? variableLength.toString() : '';
+    return '$fromVariable($from) -[:$type$vlStr]-> $toVariable($to)';
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -40,7 +87,8 @@ class PathEdge {
           to == other.to &&
           type == other.type &&
           fromVariable == other.fromVariable &&
-          toVariable == other.toVariable;
+          toVariable == other.toVariable &&
+          variableLength == other.variableLength;
 
   @override
   int get hashCode =>
@@ -48,7 +96,8 @@ class PathEdge {
       to.hashCode ^
       type.hashCode ^
       fromVariable.hashCode ^
-      toVariable.hashCode;
+      toVariable.hashCode ^
+      variableLength.hashCode;
 }
 
 /// Represents a complete path match result with both nodes and edges.
@@ -123,7 +172,17 @@ class CypherPatternGrammar extends GrammarDefinition {
 
   Parser backwardArrow() => string('<-') & ref0(edgeType).optional() & char('-');
 
-  Parser edgeType() => char('[') & char(':') & ref0(variable) & char(']');
+  Parser edgeType() => char('[') & char(':') & ref0(variable) & ref0(variableLengthModifier).optional() & char(']');
+
+  Parser variableLengthModifier() =>
+    char('*') &
+    (
+      (digit().plus().flatten() & string('..') & digit().plus().flatten()) | // *min..max
+      (digit().plus().flatten() & string('..')) |                           // *min..
+      (string('..') & digit().plus().flatten()) |                           // *..max
+      digit().plus().flatten() |                                            // *n (exact)
+      epsilon()                                                             // just *
+    ).optional();
 }
 
 /// PetitParser-based pattern query implementation
@@ -197,31 +256,136 @@ class PetitPatternQuery<N extends Node> {
       final edgeTypeTrimmed = edgeType.trim();
       if (edgeTypeTrimmed.isEmpty) return const <Map<String, String>>[];
 
-      final nextRows = <Map<String, String>>[];
-      final seen = <String>{};
-
-      for (final row in currentRows) {
-        final srcId = row[aliasHere];
-        if (srcId == null) continue;
-        final neighbors = isForward
-            ? graph.outNeighbors(srcId, edgeTypeTrimmed)
-            : graph.inNeighbors(srcId, edgeTypeTrimmed);
-        for (final nb in neighbors) {
-          final newRow = Map<String, String>.from(row);
-          newRow[nextAlias] = nb;
-          final keys = newRow.keys.toList()..sort();
-          final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
-          if (seen.add(sig)) {
-            nextRows.add(newRow);
-          }
-        }
+      // Check if this is a variable-length relationship
+      final variableLengthSpec = _extractVariableLengthSpec(edgePart);
+      if (variableLengthSpec != null) {
+        // Handle variable-length relationship using enumeratePaths
+        final vlResults = _executeVariableLengthSegment(
+          currentRows, aliasHere, nextAlias, edgeTypeTrimmed, variableLengthSpec, isForward
+        );
+        currentRows = vlResults;
+      } else {
+        // Handle single-hop relationship (existing logic)
+        currentRows = _executeSingleHopSegment(
+          currentRows, aliasHere, nextAlias, edgeTypeTrimmed, isForward
+        );
       }
 
-      currentRows = nextRows;
       if (currentRows.isEmpty) break;
     }
 
     return currentRows;
+  }
+
+  /// Executes a single-hop relationship segment
+  List<Map<String, String>> _executeSingleHopSegment(
+    List<Map<String, String>> currentRows,
+    String aliasHere,
+    String nextAlias,
+    String edgeType,
+    bool isForward,
+  ) {
+    final nextRows = <Map<String, String>>[];
+    final seen = <String>{};
+
+    for (final row in currentRows) {
+      final srcId = row[aliasHere];
+      if (srcId == null) continue;
+      final neighbors = isForward
+          ? graph.outNeighbors(srcId, edgeType)
+          : graph.inNeighbors(srcId, edgeType);
+      for (final nb in neighbors) {
+        final newRow = Map<String, String>.from(row);
+        newRow[nextAlias] = nb;
+        final keys = newRow.keys.toList()..sort();
+        final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
+        if (seen.add(sig)) {
+          nextRows.add(newRow);
+        }
+      }
+    }
+
+    return nextRows;
+  }
+
+  /// Executes a variable-length relationship segment using enumeratePaths
+  List<Map<String, String>> _executeVariableLengthSegment(
+    List<Map<String, String>> currentRows,
+    String aliasHere,
+    String nextAlias,
+    String edgeType,
+    VariableLengthSpec vlSpec,
+    bool isForward,
+  ) {
+    final nextRows = <Map<String, String>>[];
+    final seen = <String>{};
+
+    for (final row in currentRows) {
+      final srcId = row[aliasHere];
+      if (srcId == null) continue;
+
+      // Find all possible destinations within hop limits
+      final destinations = _findVariableLengthDestinations(
+        srcId, edgeType, vlSpec, isForward
+      );
+
+      for (final destId in destinations) {
+        final newRow = Map<String, String>.from(row);
+        newRow[nextAlias] = destId;
+        final keys = newRow.keys.toList()..sort();
+        final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
+        if (seen.add(sig)) {
+          nextRows.add(newRow);
+        }
+      }
+    }
+
+    return nextRows;
+  }
+
+  /// Finds all destinations reachable via variable-length paths
+  Set<String> _findVariableLengthDestinations(
+    String srcId,
+    String edgeType,
+    VariableLengthSpec vlSpec,
+    bool isForward,
+  ) {
+    final destinations = <String>{};
+    final maxHops = vlSpec.effectiveMaxHops;
+    final minHops = vlSpec.effectiveMinHops;
+
+    // Use breadth-first search to find all reachable nodes within hop limits
+    final queue = <({String nodeId, int hops})>[];
+    final visited = <String, int>{}; // node -> minimum hops to reach it
+
+    queue.add((nodeId: srcId, hops: 0));
+    visited[srcId] = 0;
+
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+
+      // If we've reached the minimum hops, this is a valid destination
+      if (current.hops >= minHops && current.nodeId != srcId) {
+        destinations.add(current.nodeId);
+      }
+
+      // Continue exploring if we haven't reached max hops
+      if (current.hops < maxHops) {
+        final neighbors = isForward
+            ? graph.outNeighbors(current.nodeId, edgeType)
+            : graph.inNeighbors(current.nodeId, edgeType);
+
+        for (final neighbor in neighbors) {
+          final newHops = current.hops + 1;
+          if (!visited.containsKey(neighbor) || visited[neighbor]! > newHops) {
+            visited[neighbor] = newHops;
+            queue.add((nodeId: neighbor, hops: newHops));
+          }
+        }
+      }
+    }
+
+    return destinations;
   }
 
   Map<String, Set<String>> match(String pattern, {String? startId}) {
@@ -295,10 +459,44 @@ class PetitPatternQuery<N extends Node> {
 
   String _extractEdgeFromConnection(dynamic connection) {
     final connectionStr = _flattenToString(connection);
-    // Extract edge type like [:WORKS_FOR] from connection
+    // Extract edge type like [:WORKS_FOR] or [:WORKS_FOR*1..3] from connection
     final match = RegExp(r'\[([^\]]+)\]').firstMatch(connectionStr);
     return match != null ? '${match.group(0)}' : '';
   }
+
+  /// Extracts variable-length specification from edge string
+  VariableLengthSpec? _extractVariableLengthSpec(String edgeStr) {
+    // Look for patterns like [:TYPE*], [:TYPE*1..3], [:TYPE*2..], [:TYPE*..5]
+    final match = RegExp(r'\[:([^\*]+)\*([^\]]*)]').firstMatch(edgeStr);
+    if (match == null) return null;
+
+    final vlPart = match.group(2) ?? '';
+    if (vlPart.isEmpty) {
+      // Just * means unlimited
+      return const VariableLengthSpec();
+    }
+
+    // Parse patterns like "1..3", "2..", "..5"
+    if (vlPart.contains('..')) {
+      final parts = vlPart.split('..');
+      final minStr = parts[0];
+      final maxStr = parts.length > 1 ? parts[1] : '';
+
+      final min = minStr.isNotEmpty ? int.tryParse(minStr) : null;
+      final max = maxStr.isNotEmpty ? int.tryParse(maxStr) : null;
+
+      return VariableLengthSpec(minHops: min, maxHops: max);
+    }
+
+    // Single number like "3" (from "*3") means exactly 3 hops
+    final exactHops = int.tryParse(vlPart.trim());
+    if (exactHops != null) {
+      return VariableLengthSpec(minHops: exactHops, maxHops: exactHops);
+    }
+
+    return const VariableLengthSpec(); // Default to unlimited
+  }
+
 
   String _flattenSegment(dynamic segment) {
     if (segment is List && segment.length >= 3) {
@@ -412,7 +610,12 @@ class PetitPatternQuery<N extends Node> {
           } else if (c == ']') {
             depth--;
             if (depth == 0) {
-              return segment.substring(contentStart, k);
+              // Extract just the edge type (before *)
+              final fullContent = segment.substring(contentStart, k);
+              if (fullContent.contains('*')) {
+                return fullContent.split('*')[0];
+              }
+              return fullContent;
             }
           }
           k++;
@@ -425,6 +628,7 @@ class PetitPatternQuery<N extends Node> {
 
   List<PathEdge> _buildEdgesForRow(String pattern, Map<String, String> row) {
     // TODO: Build edges from parse tree instead of re-parsing pattern
+    // For now, return empty list - this will be implemented in a future version
     return <PathEdge>[];
   }
 
