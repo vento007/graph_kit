@@ -1,7 +1,6 @@
 import 'package:test/test.dart';
 import 'package:petitparser/petitparser.dart';
 import 'package:graph_kit/graph_kit.dart';
-import 'package:graph_kit/src/pattern_query_petit.dart';
 
 // Helper function to test variable-length spec parsing
 VariableLengthSpec? _extractVariableLengthSpecForTesting(String edgeStr) {
@@ -203,11 +202,11 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
 
     // TODO: Re-enable when extractPartsFromParseTreeForTesting is exposed
     // test('test parse tree extraction', () {
-    //   final query = PetitPatternQuery(Graph<Node>());
+    //   final query = PatternQuery(Graph<Node>());
     //   ...
     // });
 
-    // TODO: Re-enable when PetitPatternQuery.match is properly implemented
+    // TODO: Re-enable when PatternQuery.match is properly implemented
     // test('side-by-side comparison with original parser', () {
     //   ...
     // });
@@ -296,11 +295,11 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
 
     group('WHERE clause tests', () {
       late Graph<Node> graph;
-      late PetitPatternQuery<Node> query;
+      late PatternQuery<Node> query;
 
       setUp(() {
         graph = Graph<Node>();
-        query = PetitPatternQuery(graph);
+        query = PatternQuery(graph);
 
         // Create test data with properties
         graph.addNode(Node(
@@ -476,6 +475,49 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
         expect(results, hasLength(3));
         final personIds = results.map((r) => r['person']).toSet();
         expect(personIds, containsAll(['senior', 'alice', 'bob']));
+      });
+
+      test('should return empty result for invalid variable names in WHERE clause', () {
+        // Test the bug fix: undefined variables should cause WHERE to fail
+        final results = query.matchRows('MATCH paa:Person WHERE pwerwer.age > 70 AND person.department = "Management"');
+
+        // Should return empty because:
+        // 1. 'pwerwer' variable doesn't exist (should be 'paa')
+        // 2. 'person' variable doesn't exist (should be 'paa')
+        expect(results, isEmpty, reason: 'Invalid variable names should cause WHERE clause to fail');
+      });
+
+      test('should return empty result for non-existent variables', () {
+        // Test individual cases of undefined variables
+        final results1 = query.matchRows('MATCH person:Person WHERE nonexistent.age > 25');
+        expect(results1, isEmpty, reason: 'Non-existent variable should cause WHERE to fail');
+
+        final results2 = query.matchRows('MATCH person:Person WHERE person.nonexistent > 25');
+        expect(results2, isEmpty, reason: 'Non-existent property should cause WHERE to fail');
+      });
+
+      test('should return empty result for malformed property syntax', () {
+        // Test malformed property expressions
+        final results1 = query.matchRows('MATCH person:Person WHERE invalidproperty > 25');
+        expect(results1, isEmpty, reason: 'Property without dot should fail');
+
+        final results2 = query.matchRows('MATCH person:Person WHERE .age > 25');
+        expect(results2, isEmpty, reason: 'Property starting with dot should fail');
+
+        final results3 = query.matchRows('MATCH person:Person WHERE person. > 25');
+        expect(results3, isEmpty, reason: 'Property ending with dot should fail');
+      });
+
+      test('should properly validate variable names match pattern variables', () {
+        // Test that WHERE variables must match pattern variables
+        final results1 = query.matchRows('MATCH p:Person WHERE person.age > 25');
+        expect(results1, isEmpty, reason: 'WHERE variable must match pattern variable (p vs person)');
+
+        // Test correct usage
+        final results2 = query.matchRows('MATCH p:Person WHERE p.age > 25');
+        expect(results2.length, 2, reason: 'Correct variable matching should work');
+        final personIds = results2.map((r) => r['p']).toSet();
+        expect(personIds, containsAll(['alice', 'bob']));
       });
     });
   });

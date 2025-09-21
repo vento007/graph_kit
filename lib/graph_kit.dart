@@ -37,6 +37,5 @@ export 'src/graph_algorithms.dart';
 export 'src/node.dart';
 export 'src/node_type.dart';
 export 'src/pattern_query.dart';
-export 'src/pattern_query_petit.dart';
 export 'src/serialization.dart';
 export 'src/traversal.dart';

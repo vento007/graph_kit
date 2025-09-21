@@ -1,12 +1,11 @@
 import 'package:test/test.dart';
 import 'package:petitparser/petitparser.dart';
 import 'package:graph_kit/graph_kit.dart';
-import 'package:graph_kit/src/pattern_query_petit.dart';
 
 void main() {
   group('Variable-Length Pattern Tests', () {
     late Graph<Node> hierarchyGraph;
-    late PetitPatternQuery<Node> query;
+    late PatternQuery<Node> query;
 
     setUp(() {
       // Create consistent test hierarchy for all tests
@@ -36,7 +35,7 @@ void main() {
       hierarchyGraph.addEdge('mgr2', 'MANAGES', 'emp3');
       hierarchyGraph.addEdge('mgr3', 'MANAGES', 'emp4');
 
-      query = PetitPatternQuery(hierarchyGraph);
+      query = PatternQuery(hierarchyGraph);
     });
 
     group('Grammar Parsing Tests', () {
@@ -176,7 +175,7 @@ void main() {
       test('should handle isolated nodes', () {
         final isolatedGraph = Graph<Node>();
         isolatedGraph.addNode(Node(id: 'isolated', type: 'Node', label: 'Isolated'));
-        final isolatedQuery = PetitPatternQuery(isolatedGraph);
+        final isolatedQuery = PatternQuery(isolatedGraph);
 
         final results = isolatedQuery.matchRows('node-[:ANY*]->target', startId: 'isolated');
         expect(results, isEmpty); // No outgoing edges
@@ -222,7 +221,7 @@ void main() {
           }
         }
 
-        final deepQuery = PetitPatternQuery(deepGraph);
+        final deepQuery = PatternQuery(deepGraph);
 
         // Test that hop limits are respected
         final results1 = deepQuery.matchRows('start-[:CONNECTS*1..3]->end', startId: 'level0');

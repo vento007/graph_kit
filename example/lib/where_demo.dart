@@ -30,7 +30,7 @@ class WhereClauseDemo extends StatefulWidget {
 
 class _WhereClauseDemoState extends State<WhereClauseDemo> {
   late Graph<Node> graph;
-  late PetitPatternQuery<Node> query;
+  late PatternQuery<Node> query;
   final TextEditingController _queryController = TextEditingController();
   List<Map<String, String>> _results = [];
   String? _error;
@@ -114,7 +114,7 @@ class _WhereClauseDemoState extends State<WhereClauseDemo> {
 
   void _initializeGraph() {
     graph = Graph<Node>();
-    query = PetitPatternQuery(graph);
+    query = PatternQuery(graph);
 
     // Create comprehensive test data
     _addPeople();
