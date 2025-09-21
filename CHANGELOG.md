@@ -1,4 +1,30 @@
 
+## 0.6.11
+
+### Added
+- **Complete WHERE clause support with parentheses** in PetitParser implementation
+- Full Cypher-style property filtering: `WHERE person.age > 30 AND person.salary >= 90000`
+- Logical operators with proper precedence: `AND`, `OR`
+- **Parentheses support for complex expressions**: `WHERE (A AND B) OR (C AND D)`
+- **Multiple parentheses groups**: `WHERE (condition1 AND condition2) OR (condition3 AND condition4)`
+- Property comparisons with all operators: `>`, `<`, `>=`, `<=`, `=`, `!=`
+- String and numeric value support in WHERE conditions
+- Comprehensive test suite with 13 WHERE clause test cases including parentheses
+- **Enhanced Flutter demo** with parentheses examples and real-world query scenarios
+
+### Features
+- **Backward compatibility**: MATCH keyword is optional for existing patterns
+- **Type safety**: Proper property value parsing and comparison
+- **Error handling**: Graceful handling of missing properties and parse failures
+- **Performance**: Efficient parse tree evaluation for complex nested expressions
+
+### Documentation
+- **Complete Cypher Guide** (`CYPHER_GUIDE.md`) documenting all supported features
+
+### Note
+- WHERE clause features are only available in PetitParser implementation
+- All existing functionality remains unchanged and fully backward compatible
+
 ## 0.6.10
 
 ### Added

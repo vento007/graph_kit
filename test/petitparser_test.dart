@@ -293,5 +293,190 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
       //   ...
       // });
     });
+
+    group('WHERE clause tests', () {
+      late Graph<Node> graph;
+      late PetitPatternQuery<Node> query;
+
+      setUp(() {
+        graph = Graph<Node>();
+        query = PetitPatternQuery(graph);
+
+        // Create test data with properties
+        graph.addNode(Node(
+          id: 'alice',
+          type: 'Person',
+          label: 'Alice Cooper',
+          properties: {'age': 28, 'department': 'Engineering', 'salary': 85000},
+        ));
+        graph.addNode(Node(
+          id: 'bob',
+          type: 'Person',
+          label: 'Bob Wilson',
+          properties: {'age': 35, 'department': 'Engineering', 'salary': 95000},
+        ));
+        graph.addNode(Node(
+          id: 'carol',
+          type: 'Person',
+          label: 'Carol Davis',
+          properties: {'age': 22, 'department': 'Marketing', 'salary': 60000},
+        ));
+        graph.addNode(Node(
+          id: 'engineering',
+          type: 'Team',
+          label: 'Engineering',
+          properties: {'size': 15, 'budget': 150000},
+        ));
+        graph.addNode(Node(
+          id: 'marketing',
+          type: 'Team',
+          label: 'Marketing',
+          properties: {'size': 8, 'budget': 80000},
+        ));
+
+        // Add relationships
+        graph.addEdge('alice', 'WORKS_FOR', 'engineering');
+        graph.addEdge('bob', 'WORKS_FOR', 'engineering');
+        graph.addEdge('carol', 'WORKS_FOR', 'marketing');
+      });
+
+      test('should parse WHERE clause with property comparison', () {
+        final grammar = CypherPatternGrammar();
+        final parser = grammar.build();
+
+        final result = parser.parse('MATCH person:Person WHERE person.age > 25');
+        expect(result is Success, isTrue);
+      });
+
+      test('should filter by numeric property (greater than)', () {
+        final results = query.matchRows('MATCH person:Person WHERE person.age > 25');
+
+        expect(results.length, 2); // Alice (28) and Bob (35)
+        final personIds = results.map((r) => r['person']).toSet();
+        expect(personIds, containsAll(['alice', 'bob']));
+        expect(personIds, isNot(contains('carol'))); // Carol is 22
+      });
+
+      test('should filter by string property (exact match)', () {
+        final results = query.matchRows('MATCH person:Person WHERE person.department = "Engineering"');
+
+        expect(results.length, 2); // Alice and Bob
+        final personIds = results.map((r) => r['person']).toSet();
+        expect(personIds, containsAll(['alice', 'bob']));
+        expect(personIds, isNot(contains('carol'))); // Carol is in Marketing
+      });
+
+      test('should filter by numeric property (less than or equal)', () {
+        final results = query.matchRows('MATCH person:Person WHERE person.salary <= 85000');
+
+        expect(results.length, 2); // Alice (85000) and Carol (60000)
+        final personIds = results.map((r) => r['person']).toSet();
+        expect(personIds, containsAll(['alice', 'carol']));
+        expect(personIds, isNot(contains('bob'))); // Bob has 95000
+      });
+
+      test('should handle AND logical operator', () {
+        final results = query.matchRows(
+          'MATCH person:Person WHERE person.age > 25 AND person.department = "Engineering"'
+        );
+
+        expect(results.length, 2); // Alice and Bob meet both criteria
+        final personIds = results.map((r) => r['person']).toSet();
+        expect(personIds, containsAll(['alice', 'bob']));
+      });
+
+      test('should handle OR logical operator', () {
+        final results = query.matchRows(
+          'MATCH person:Person WHERE person.age < 25 OR person.salary > 90000'
+        );
+
+        expect(results.length, 2); // Carol (age < 25) and Bob (salary > 90000)
+        final personIds = results.map((r) => r['person']).toSet();
+        expect(personIds, containsAll(['carol', 'bob']));
+      });
+
+      test('should work with relationship patterns and WHERE', () {
+        final results = query.matchRows(
+          'MATCH person:Person-[:WORKS_FOR]->team:Team WHERE person.age > 30'
+        );
+
+        expect(results.length, 1); // Only Bob (35) > 30
+        expect(results[0]['person'], 'bob');
+        expect(results[0]['team'], 'engineering');
+      });
+
+      test('should handle complex WHERE with multiple conditions', () {
+        final results = query.matchRows(
+          'MATCH person:Person WHERE person.age >= 25 AND person.age <= 30 AND person.department = "Engineering"'
+        );
+
+        expect(results.length, 1); // Only Alice (28) meets all criteria
+        expect(results[0]['person'], 'alice');
+      });
+
+      test('should handle != (not equal) operator', () {
+        final results = query.matchRows('MATCH person:Person WHERE person.department != "Marketing"');
+
+        expect(results.length, 2); // Alice and Bob
+        final personIds = results.map((r) => r['person']).toSet();
+        expect(personIds, containsAll(['alice', 'bob']));
+        expect(personIds, isNot(contains('carol')));
+      });
+
+      test('should return empty result when no matches', () {
+        final results = query.matchRows('MATCH person:Person WHERE person.age > 100');
+        expect(results, isEmpty);
+      });
+
+      test('should handle queries without WHERE clause (backward compatibility)', () {
+        final results = query.matchRows('MATCH person:Person');
+        expect(results.length, 3); // All three people
+      });
+
+      test('should handle missing properties gracefully', () {
+        // Add node without age property
+        graph.addNode(Node(
+          id: 'david',
+          type: 'Person',
+          label: 'David Smith',
+          properties: {'department': 'Sales'}, // No age property
+        ));
+
+        final results = query.matchRows('MATCH person:Person WHERE person.age > 25');
+
+        // Should only return alice and bob (david has no age property)
+        expect(results.length, 2);
+        final personIds = results.map((r) => r['person']).toSet();
+        expect(personIds, containsAll(['alice', 'bob']));
+        expect(personIds, isNot(contains('david')));
+      });
+
+      test('should handle parentheses in WHERE clauses', () {
+        // Add person who meets complex criteria
+        graph.addNode(Node(
+          id: 'senior',
+          type: 'Person',
+          label: 'Senior Manager',
+          properties: {'age': 45, 'department': 'Management', 'salary': 150000},
+        ));
+
+        // Test parentheses parsing first
+        final grammar = CypherPatternGrammar();
+        final parser = grammar.build();
+        final parseResult = parser.parse('MATCH person:Person WHERE (person.age > 40 AND person.salary > 100000) OR person.department = "Engineering"');
+        expect(parseResult.isSuccess, isTrue, reason: 'Parentheses should parse successfully');
+
+        // Test the actual parentheses evaluation
+        final results = query.matchRows('MATCH person:Person WHERE (person.age > 40 AND person.salary > 100000) OR person.department = "Engineering"');
+
+        // Should return:
+        // - 'senior' (age 45 > 40 AND salary 150000 > 100000)
+        // - 'alice' (department = "Engineering")
+        // - 'bob' (department = "Engineering")
+        expect(results, hasLength(3));
+        final personIds = results.map((r) => r['person']).toSet();
+        expect(personIds, containsAll(['senior', 'alice', 'bob']));
+      });
+    });
   });
 }

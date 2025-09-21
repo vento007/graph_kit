@@ -2,6 +2,7 @@
 import 'package:petitparser/petitparser.dart';
 import 'graph.dart';
 import 'node.dart';
+import 'pattern_query.dart';
 
 /// Represents variable-length relationship specifications.
 class VariableLengthSpec {
@@ -43,110 +44,13 @@ class VariableLengthSpec {
   int get hashCode => minHops.hashCode ^ maxHops.hashCode;
 }
 
-/// Represents an edge in a path result, containing connection information.
-class PathEdge {
-  /// Source node ID
-  final String from;
-
-  /// Target node ID
-  final String to;
-
-  /// Edge type (e.g., 'WORKS_FOR', 'MANAGES')
-  final String type;
-
-  /// Variable-length specification if this is a variable-length edge
-  final VariableLengthSpec? variableLength;
-
-  /// Variable name for source node from pattern (e.g., 'person')
-  final String fromVariable;
-
-  /// Variable name for target node from pattern (e.g., 'team')
-  final String toVariable;
-
-  const PathEdge({
-    required this.from,
-    required this.to,
-    required this.type,
-    required this.fromVariable,
-    required this.toVariable,
-    this.variableLength,
-  });
-
-  @override
-  String toString() {
-    final vlStr = variableLength != null ? variableLength.toString() : '';
-    return '$fromVariable($from) -[:$type$vlStr]-> $toVariable($to)';
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is PathEdge &&
-          runtimeType == other.runtimeType &&
-          from == other.from &&
-          to == other.to &&
-          type == other.type &&
-          fromVariable == other.fromVariable &&
-          toVariable == other.toVariable &&
-          variableLength == other.variableLength;
-
-  @override
-  int get hashCode =>
-      from.hashCode ^
-      to.hashCode ^
-      type.hashCode ^
-      fromVariable.hashCode ^
-      toVariable.hashCode ^
-      variableLength.hashCode;
-}
-
-/// Represents a complete path match result with both nodes and edges.
-class PathMatch {
-  /// Map of variable names to node IDs (same format as matchRows)
-  final Map<String, String> nodes;
-
-  /// Ordered list of edges in the path
-  final List<PathEdge> edges;
-
-  const PathMatch({required this.nodes, required this.edges});
-
-  @override
-  String toString() => 'PathMatch(nodes: $nodes, edges: $edges)';
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is PathMatch &&
-          runtimeType == other.runtimeType &&
-          _mapEquals(nodes, other.nodes) &&
-          _listEquals(edges, other.edges);
-
-  @override
-  int get hashCode => nodes.hashCode ^ edges.hashCode;
-
-  bool _mapEquals<K, V>(Map<K, V> a, Map<K, V> b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (final key in a.keys) {
-      if (!b.containsKey(key) || a[key] != b[key]) return false;
-    }
-    return true;
-  }
-
-  bool _listEquals<T>(List<T> a, List<T> b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-}
 
 /// Grammar definition for Cypher-like patterns
 class CypherPatternGrammar extends GrammarDefinition {
   @override
-  Parser start() => ref0(pattern).end();
+  Parser start() => (string('MATCH') & whitespace().plus()).optional() & ref0(patternWithWhere).end();
+
+  Parser patternWithWhere() => ref0(pattern) & (whitespace().plus() & ref0(whereClause)).optional();
 
   Parser pattern() => ref0(segment) & (ref0(connection) & ref0(segment)).star();
 
@@ -183,6 +87,41 @@ class CypherPatternGrammar extends GrammarDefinition {
       digit().plus().flatten() |                                            // *n (exact)
       epsilon()                                                             // just *
     ).optional();
+
+  // WHERE clause support
+  Parser whereClause() => string('WHERE') & whitespace().plus() & ref0(whereExpression);
+
+  Parser whereExpression() => ref0(orExpression);
+
+  Parser orExpression() => ref0(andExpression) & (whitespace().star() & string('OR') & whitespace().star() & ref0(andExpression)).star();
+
+  Parser andExpression() => ref0(primaryExpression) & (whitespace().star() & string('AND') & whitespace().star() & ref0(primaryExpression)).star();
+
+  Parser primaryExpression() => ref0(parenthesizedExpression) | ref0(comparisonExpression);
+
+  Parser parenthesizedExpression() =>
+    char('(') &
+    whitespace().star() &
+    ref0(whereExpression) &
+    whitespace().star() &
+    char(')');
+
+  Parser comparisonExpression() =>
+    ref0(propertyExpression) &
+    whitespace().star() &
+    ref0(comparisonOperator) &
+    whitespace().star() &
+    ref0(value);
+
+  Parser propertyExpression() => ref0(variable) & char('.') & ref0(variable);
+
+  Parser comparisonOperator() => string('>=') | string('<=') | string('!=') | char('>') | char('<') | char('=');
+
+  Parser value() => ref0(stringLiteral) | ref0(numberLiteral);
+
+  Parser stringLiteral() => char('"') & (char('"').neg()).star() & char('"');
+
+  Parser numberLiteral() => digit().plus();
 }
 
 /// PetitParser-based pattern query implementation
@@ -202,13 +141,38 @@ class PetitPatternQuery<N extends Node> {
       return const <Map<String, String>>[];
     }
 
-    // TODO: Convert parse tree to parts and directions
-    // For now, we'll use the same structure as original parser
+    // Extract pattern and WHERE clause from parse tree
     final parts = <String>[];
     final directions = <bool>[];
+    dynamic whereClause;
 
-    // This is where we'll extract from parse tree instead of manual parsing
-    _extractPartsFromParseTree(result.value, parts, directions);
+    // Parse tree structure: [optional_MATCH, [pattern, [whitespace, WHERE_clause]?]]
+    // or without MATCH: [[pattern, [whitespace, WHERE_clause]?]]
+    if (result.value is List) {
+      dynamic patternWithWhere;
+
+      // Check if MATCH is present
+      if (result.value.length >= 2 && result.value[0] != null) {
+        // With MATCH: [MATCH_part, patternWithWhere]
+        patternWithWhere = result.value[1];
+      } else {
+        // Without MATCH: [null, patternWithWhere] or direct patternWithWhere
+        patternWithWhere = result.value.length > 1 ? result.value[1] : result.value[0];
+      }
+
+      if (patternWithWhere is List && patternWithWhere.isNotEmpty) {
+        // Extract pattern (first element)
+        _extractPartsFromParseTree(patternWithWhere[0], parts, directions);
+
+        // Extract WHERE clause if present (second element is [whitespace, WHERE_clause])
+        if (patternWithWhere.length > 1 && patternWithWhere[1] != null && patternWithWhere[1] is List) {
+          final whereSection = patternWithWhere[1] as List;
+          if (whereSection.length >= 2) {
+            whereClause = whereSection[1]; // Skip whitespace, get WHERE clause
+          }
+        }
+      }
+    }
 
     // Debug removed - working correctly
 
@@ -272,6 +236,11 @@ class PetitPatternQuery<N extends Node> {
       }
 
       if (currentRows.isEmpty) break;
+    }
+
+    // Apply WHERE clause filtering if present
+    if (whereClause != null) {
+      currentRows = _applyWhereClause(currentRows, whereClause);
     }
 
     return currentRows;
@@ -743,4 +712,184 @@ class PetitPatternQuery<N extends Node> {
     }
     return out;
   }
+
+  /// Apply WHERE clause filtering to rows
+  List<Map<String, String>> _applyWhereClause(List<Map<String, String>> rows, dynamic whereClause) {
+    if (whereClause == null) return rows;
+
+    return rows.where((row) => _evaluateWhereExpression(row, whereClause)).toList();
+  }
+
+  bool _evaluateWhereExpression(Map<String, String> row, dynamic whereExpr) {
+    if (whereExpr is! List) return true;
+
+    // Navigate to the actual WHERE expression content
+    // Structure: [WHERE, whitespace, expression]
+    if (whereExpr.length >= 3 && whereExpr[0] == 'WHERE') {
+      return _evaluateExpression(row, whereExpr[2]);
+    }
+
+    // Direct expression evaluation
+    return _evaluateExpression(row, whereExpr);
+  }
+
+  bool _evaluateExpression(Map<String, String> row, dynamic expr) {
+    if (expr is! List) return true;
+    if (expr.isEmpty) return true;
+
+    // Handle OR expressions (lower precedence)
+    // Structure: [first_term, [OR_operations]*]
+    if (expr.length >= 2 && expr[1] is List) {
+      final orOperations = expr[1] as List;
+      bool result = _evaluateAndExpression(row, expr[0]);
+
+      for (final op in orOperations) {
+        if (op is List && op.length >= 4 && _containsString(op, 'OR')) {
+          final rightExpr = op[3]; // The expression after OR
+          final rightResult = _evaluateAndExpression(row, rightExpr);
+          result = result || rightResult;
+        }
+      }
+      return result;
+    }
+
+    // Single expression (no OR)
+    return _evaluateAndExpression(row, expr);
+  }
+
+  bool _evaluateAndExpression(Map<String, String> row, dynamic expr) {
+    if (expr is! List) return true;
+    if (expr.isEmpty) return true;
+
+    // Handle AND expressions (higher precedence)
+    // Structure: [first_term, [AND_operations]*]
+    if (expr.length >= 2 && expr[1] is List) {
+      final andOperations = expr[1] as List;
+      bool result = _evaluatePrimaryExpression(row, expr[0]);
+
+      for (final op in andOperations) {
+        if (op is List && op.length >= 4 && _containsString(op, 'AND')) {
+          final rightExpr = op[3]; // The expression after AND
+          final rightResult = _evaluatePrimaryExpression(row, rightExpr);
+          result = result && rightResult;
+        }
+      }
+      return result;
+    }
+
+    // Single expression (no AND)
+    return _evaluatePrimaryExpression(row, expr);
+  }
+
+  bool _evaluatePrimaryExpression(Map<String, String> row, dynamic expr) {
+    if (expr is! List) return true;
+    if (expr.isEmpty) return true;
+
+    // Check for parenthesized expressions: [('(', whitespace, content, whitespace, ')')]
+    if (expr.length == 5 && expr[0] == '(' && expr[4] == ')') {
+      return _evaluateExpression(row, expr[2]); // Evaluate the content inside parentheses
+    }
+
+    // Check for comparison expressions: [property_expr, whitespace, operator, whitespace, value]
+    if (expr.length == 5) {
+      return _evaluateComparisonExpression(row, expr);
+    }
+
+    return true;
+  }
+
+  bool _evaluateComparisonExpression(Map<String, String> row, dynamic expr) {
+    if (expr is! List || expr.length != 5) return true;
+
+    // Extract property expression (e.g., "person.age")
+    final propertyExpr = expr[0];
+    final operator = expr[2];
+    final valueExpr = expr[4];
+
+    final propertyStr = _flattenToString(propertyExpr);
+    final operatorStr = _flattenToString(operator);
+    final valueStr = _flattenToString(valueExpr);
+
+    // Parse property.field
+    final propMatch = RegExp(r'(\w+)\.(\w+)').firstMatch(propertyStr);
+    if (propMatch == null) return true;
+
+    final variable = propMatch.group(1)!;
+    final property = propMatch.group(2)!;
+
+    // Get node ID from row
+    final nodeId = row[variable];
+    if (nodeId == null) return true;
+
+    // Get node from graph
+    final node = graph.nodesById[nodeId];
+    if (node == null) return true;
+
+    // Get property value
+    final propValue = node.properties?[property];
+    if (propValue == null) return false;
+
+    // Parse comparison value
+    final comparisonValue = _parseValue(valueStr);
+
+    return _compareValues(propValue, operatorStr, comparisonValue);
+  }
+
+  dynamic _parseValue(String valueStr) {
+    final trimmed = valueStr.trim();
+
+    // String literal
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      return trimmed.substring(1, trimmed.length - 1);
+    }
+
+    // Number
+    final numValue = int.tryParse(trimmed);
+    if (numValue != null) return numValue;
+
+    final doubleValue = double.tryParse(trimmed);
+    if (doubleValue != null) return doubleValue;
+
+    return trimmed;
+  }
+
+  bool _compareValues(dynamic propValue, String operator, dynamic comparisonValue) {
+    try {
+      // Convert both values to the same type for comparison
+      if (propValue is num && comparisonValue is num) {
+        switch (operator) {
+          case '>': return propValue > comparisonValue;
+          case '<': return propValue < comparisonValue;
+          case '>=': return propValue >= comparisonValue;
+          case '<=': return propValue <= comparisonValue;
+          case '=': return propValue == comparisonValue;
+          case '!=': return propValue != comparisonValue;
+        }
+      } else {
+        // String comparison
+        final propStr = propValue.toString();
+        final compStr = comparisonValue.toString();
+
+        switch (operator) {
+          case '=': return propStr == compStr;
+          case '!=': return propStr != compStr;
+          default: return false; // Other operators not supported for strings
+        }
+      }
+    } catch (e) {
+      return false;
+    }
+    return false;
+  }
+
+  bool _containsString(dynamic expr, String target) {
+    if (expr is String) return expr == target;
+    if (expr is List) {
+      for (final item in expr) {
+        if (_containsString(item, target)) return true;
+      }
+    }
+    return false;
+  }
+
 }
