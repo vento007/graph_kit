@@ -268,9 +268,9 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
         final spec4 = _extractVariableLengthSpecForTesting('[:MANAGES*..4]');
         expect(spec4, isNotNull);
         expect(spec4!.minHops, isNull);
-        expect(spec4!.maxHops, equals(4));
-        expect(spec4!.effectiveMinHops, equals(1));
-        expect(spec4!.effectiveMaxHops, equals(4));
+        expect(spec4.maxHops, equals(4));
+        expect(spec4.effectiveMinHops, equals(1));
+        expect(spec4.effectiveMaxHops, equals(4));
 
         // Test non-variable-length
         final spec5 = _extractVariableLengthSpecForTesting('[:MANAGES]');
