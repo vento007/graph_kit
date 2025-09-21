@@ -640,6 +640,13 @@ MATCH person:Person WHERE (person.age > 40 AND person.salary > 100000) OR person
 MATCH person:Person-[:WORKS_FOR]->team:Team-[:WORKS_ON]->project:Project WHERE person.salary > 80000 AND project.status = "active"
 ```
 
+**Try the Interactive WHERE Demo:**
+```bash
+cd example
+flutter run -t lib/where_demo.dart
+```
+The demo includes sample queries, real-time query execution, and a comprehensive dataset for testing complex WHERE clauses.
+
 ## 7. Comparison with Cypher
 
 | Feature               | Real Cypher | graph_kit           |
@@ -712,10 +719,17 @@ Interactive graph visualization with pattern queries:
 
 ```bash
 cd example
+
+# Main demo - visual graph with pattern queries
 flutter run
+
+# WHERE clause demo - interactive Cypher query testing
+flutter run -t lib/where_demo.dart
+
 # Features:
 # - Visual graph with nodes and edges
 # - Live pattern query execution
+# - WHERE clause testing with sample data
 # - Path highlighting and visualization
 # - Example queries with one-click execution
 ```
