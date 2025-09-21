@@ -1,5 +1,4 @@
 import 'package:graph_kit/graph_kit.dart';
-import 'package:graph_kit/src/pattern_query_petit.dart';
 
 void main() {
   print('Graph Kit - Variable-Length Path Demo');
@@ -25,7 +24,7 @@ void main() {
 
   print('Created dependency chain with ${graph.nodesById.length} components');
 
-  final query = PetitPatternQuery(graph);
+  final query = PatternQuery(graph);
 
   print('\nDemonstrating Variable-Length Hop Differences');
   print('=============================================');

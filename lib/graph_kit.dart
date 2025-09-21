@@ -28,15 +28,15 @@
 
 library;
 
-// Type safety helpers
+// Core graph components
+export 'src/cypher_grammar.dart';
+export 'src/cypher_models.dart';
 export 'src/edge_type.dart';
 export 'src/extensions_typed.dart';
 export 'src/graph.dart';
 export 'src/graph_algorithms.dart';
-// Core graph components
 export 'src/node.dart';
 export 'src/node_type.dart';
 export 'src/pattern_query.dart';
-export 'src/pattern_query_petit.dart';
 export 'src/serialization.dart';
 export 'src/traversal.dart';

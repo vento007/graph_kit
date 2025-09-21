@@ -1,6 +1,6 @@
 # GraphKit Cypher Query Language Guide
 
-note: this is only if using petitparser version of the query parser, the original queryparser does not support all the WHERE clause features and syntax. later this parser will be replacing the original parser.
+GraphKit now includes full WHERE clause support as part of the unified PatternQuery implementation. All features in this guide are available by default.
 
 GraphKit implements a powerful subset of the Cypher query language for graph pattern matching and filtering. This guide covers all supported features with practical examples.
 
@@ -326,22 +326,22 @@ MATCH team:Team WHERE
 Common parsing errors and solutions:
 
 ```cypher
-# ❌ Missing quotes for strings
+# Missing quotes for strings
 WHERE person.department = Engineering
 
-# ✅ Correct string syntax
+# Correct string syntax
 WHERE person.department = "Engineering"
 
-# ❌ Invalid operator
+# Invalid operator
 WHERE person.age === 30
 
-# ✅ Correct equality operator
+# Correct equality operator
 WHERE person.age = 30
 
-# ❌ Unmatched parentheses
+# Unmatched parentheses
 WHERE (person.age > 30 AND person.salary > 80000
 
-# ✅ Properly closed parentheses
+# Properly closed parentheses
 WHERE (person.age > 30 AND person.salary > 80000)
 ```
 

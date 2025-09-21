@@ -1,168 +1,246 @@
-// pattern_query.dart
+// pattern_query.dart - PetitParser implementation
+import 'package:petitparser/petitparser.dart';
+import 'cypher_grammar.dart';
+import 'cypher_models.dart';
 import 'graph.dart';
 import 'node.dart';
 
-/// Represents an edge in a path result, containing connection information.
-class PathEdge {
-  /// Source node ID
-  final String from;
 
-  /// Target node ID
-  final String to;
-
-  /// Edge type (e.g., 'WORKS_FOR', 'MANAGES')
-  final String type;
-
-  /// Variable name for source node from pattern (e.g., 'person')
-  final String fromVariable;
-
-  /// Variable name for target node from pattern (e.g., 'team')
-  final String toVariable;
-
-  const PathEdge({
-    required this.from,
-    required this.to,
-    required this.type,
-    required this.fromVariable,
-    required this.toVariable,
-  });
-
-  @override
-  String toString() => '$fromVariable($from) -[:$type]-> $toVariable($to)';
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is PathEdge &&
-          runtimeType == other.runtimeType &&
-          from == other.from &&
-          to == other.to &&
-          type == other.type &&
-          fromVariable == other.fromVariable &&
-          toVariable == other.toVariable;
-
-  @override
-  int get hashCode =>
-      from.hashCode ^
-      to.hashCode ^
-      type.hashCode ^
-      fromVariable.hashCode ^
-      toVariable.hashCode;
-}
-
-/// Represents a complete path match result with both nodes and edges.
-class PathMatch {
-  /// Map of variable names to node IDs (same format as matchRows)
-  final Map<String, String> nodes;
-
-  /// Ordered list of edges in the path
-  final List<PathEdge> edges;
-
-  const PathMatch({required this.nodes, required this.edges});
-
-  @override
-  String toString() => 'PathMatch(nodes: $nodes, edges: $edges)';
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is PathMatch &&
-          runtimeType == other.runtimeType &&
-          _mapEquals(nodes, other.nodes) &&
-          _listEquals(edges, other.edges);
-
-  @override
-  int get hashCode => nodes.hashCode ^ edges.hashCode;
-
-  bool _mapEquals<K, V>(Map<K, V> a, Map<K, V> b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (final key in a.keys) {
-      if (!b.containsKey(key) || a[key] != b[key]) return false;
-    }
-    return true;
-  }
-
-  bool _listEquals<T>(List<T> a, List<T> b) {
-    if (identical(a, b)) return true;
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-}
-
-/// A powerful pattern-based query engine for graph traversal, inspired by Cypher.
-///
-/// This class provides methods to execute graph queries using a mini-language
-/// that supports directional edges, type filtering, and label matching.
-///
-/// ## Pattern Syntax
-/// - **Node aliases**: `user`, `group`, `policy` (variable names for results)
-/// - **Node types**: `user:User` (filter by node type)
-/// - **Label filters**: `user{label=Alice}` (exact) or `user{label~ice}` (contains)
-/// - **Directional edges**: `-[:MEMBER_OF]->` (outgoing) or `<-[:MEMBER_OF]-` (incoming)
-///
-/// ## Example Patterns
-/// ```dart
-/// // All users and their groups
-/// 'user:User-[:MEMBER_OF]->group'
-///
-/// // Policies from a specific user
-/// 'user-[:MEMBER_OF]->group-[:SOURCE]->policy'
-///
-/// // Users who can reach a specific destination (backward traversal)
-/// 'destination<-[:DESTINATION]-group<-[:MEMBER_OF]-user'
-/// ```
-///
-/// ## Usage
-/// ```dart
-/// final graph = Graph<Node>();
-/// // ... add nodes and edges ...
-///
-/// final query = PatternQuery(graph);
-/// final results = query.match('user:User-[:MEMBER_OF]->group');
-/// print(results['user']);  // Set of user IDs
-/// print(results['group']); // Set of group IDs
-/// ```
+/// PetitParser-based pattern query implementation
 class PatternQuery<N extends Node> {
-  /// The graph to execute queries against.
   final Graph<N> graph;
+  late final Parser _parser;
 
-  /// Creates a new pattern query engine for the given [graph].
-  PatternQuery(this.graph);
+  PatternQuery(this.graph) {
+    final definition = CypherPatternGrammar();
+    _parser = definition.build();
+  }
 
-  /// Executes a single pattern query and returns grouped results.
-  ///
-  /// Takes a pattern string and returns a map where keys are variable names
-  /// from the pattern and values are sets of matching node IDs.
-  ///
-  /// Parameters:
-  /// - [pattern]: The pattern string to execute (e.g., "user-[:MEMBER_OF]->group")
-  /// - [startId]: Optional starting node ID. If provided, the query begins from
-  ///   this specific node. If null, the first segment must include type/label
-  ///   filters to seed the query.
-  ///
-  /// Returns a map from variable names to sets of node IDs.
-  ///
-  /// Example:
-  /// ```dart
-  /// // Starting from a specific user
-  /// final results = query.match('user-[:MEMBER_OF]->group', startId: 'u1');
-  /// print(results['user']);  // {'u1'}
-  /// print(results['group']); // {'g1', 'g2'}
-  ///
-  /// // Using type filtering to seed
-  /// final results = query.match('user:User-[:MEMBER_OF]->group');
-  /// print(results['user']);  // {'u1', 'u2', 'u3'}
-  /// print(results['group']); // {'g1', 'g2', 'g3'}
-  /// ```
+  /// Core implementation of pattern matching using parse tree
+  List<Map<String, String>> matchRows(String pattern, {String? startId}) {
+    final result = _parser.parse(pattern);
+    if (result is Failure) {
+      return const <Map<String, String>>[];
+    }
+
+    // Extract pattern and WHERE clause from parse tree
+    final parts = <String>[];
+    final directions = <bool>[];
+    dynamic whereClause;
+
+    // Parse tree structure: [optional_MATCH, [pattern, [whitespace, WHERE_clause]?]]
+    // or without MATCH: [[pattern, [whitespace, WHERE_clause]?]]
+    if (result.value is List) {
+      dynamic patternWithWhere;
+
+      // Check if MATCH is present
+      if (result.value.length >= 2 && result.value[0] != null) {
+        // With MATCH: [MATCH_part, patternWithWhere]
+        patternWithWhere = result.value[1];
+      } else {
+        // Without MATCH: [null, patternWithWhere] or direct patternWithWhere
+        patternWithWhere = result.value.length > 1 ? result.value[1] : result.value[0];
+      }
+
+      if (patternWithWhere is List && patternWithWhere.isNotEmpty) {
+        // Extract pattern (first element)
+        _extractPartsFromParseTree(patternWithWhere[0], parts, directions);
+
+        // Extract WHERE clause if present (second element is [whitespace, WHERE_clause])
+        if (patternWithWhere.length > 1 && patternWithWhere[1] != null && patternWithWhere[1] is List) {
+          final whereSection = patternWithWhere[1] as List;
+          if (whereSection.length >= 2) {
+            whereClause = whereSection[1]; // Skip whitespace, get WHERE clause
+          }
+        }
+      }
+    }
+
+    // Debug removed - working correctly
+
+    if (parts.isEmpty) return const <Map<String, String>>[];
+
+    // Helper to extract alias name from a part (copied from original)
+    String aliasOf(String part) {
+      if (part.startsWith('[')) {
+        final afterEdge = part.substring(part.indexOf('-') + 1);
+        return afterEdge.split(RegExp(r'[-\[:]')).first.trim();
+      } else {
+        return part.split(RegExp(r'[-\[:]')).first.trim();
+      }
+    }
+
+    // Seed rows (copied logic from original)
+    List<Map<String, String>> currentRows = <Map<String, String>>[];
+    final firstAlias = aliasOf(parts.first);
+    if (firstAlias.isEmpty) {
+      return const <Map<String, String>>[];
+    }
+
+    if (startId != null) {
+      currentRows = <Map<String, String>>[
+        {firstAlias: startId},
+      ];
+    } else {
+      // Parse optional type and label filter in first segment
+      // TODO: Extract from parse tree instead of manual parsing
+      _seedFromFirstSegment(parts.first, firstAlias, currentRows);
+    }
+
+    // Traverse over each hop, expanding rows (copied from original)
+    for (var i = 0; i < parts.length - 1; i++) {
+      final part = parts[i];
+      final aliasHere = aliasOf(part);
+      final nextAlias = aliasOf(parts[i + 1]);
+
+      final isForward = directions[i];
+      final edgePart = isForward ? part : parts[i + 1];
+      final edgeType = _edgeTypeFrom(edgePart);
+      if (edgeType == null) {
+        return const <Map<String, String>>[];
+      }
+      final edgeTypeTrimmed = edgeType.trim();
+      if (edgeTypeTrimmed.isEmpty) return const <Map<String, String>>[];
+
+      // Check if this is a variable-length relationship
+      final variableLengthSpec = _extractVariableLengthSpec(edgePart);
+      if (variableLengthSpec != null) {
+        // Handle variable-length relationship using enumeratePaths
+        final vlResults = _executeVariableLengthSegment(
+          currentRows, aliasHere, nextAlias, edgeTypeTrimmed, variableLengthSpec, isForward
+        );
+        currentRows = vlResults;
+      } else {
+        // Handle single-hop relationship (existing logic)
+        currentRows = _executeSingleHopSegment(
+          currentRows, aliasHere, nextAlias, edgeTypeTrimmed, isForward
+        );
+      }
+
+      if (currentRows.isEmpty) break;
+    }
+
+    // Apply WHERE clause filtering if present
+    if (whereClause != null) {
+      currentRows = _applyWhereClause(currentRows, whereClause);
+    }
+
+    return currentRows;
+  }
+
+  /// Executes a single-hop relationship segment
+  List<Map<String, String>> _executeSingleHopSegment(
+    List<Map<String, String>> currentRows,
+    String aliasHere,
+    String nextAlias,
+    String edgeType,
+    bool isForward,
+  ) {
+    final nextRows = <Map<String, String>>[];
+    final seen = <String>{};
+
+    for (final row in currentRows) {
+      final srcId = row[aliasHere];
+      if (srcId == null) continue;
+      final neighbors = isForward
+          ? graph.outNeighbors(srcId, edgeType)
+          : graph.inNeighbors(srcId, edgeType);
+      for (final nb in neighbors) {
+        final newRow = Map<String, String>.from(row);
+        newRow[nextAlias] = nb;
+        final keys = newRow.keys.toList()..sort();
+        final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
+        if (seen.add(sig)) {
+          nextRows.add(newRow);
+        }
+      }
+    }
+
+    return nextRows;
+  }
+
+  /// Executes a variable-length relationship segment using enumeratePaths
+  List<Map<String, String>> _executeVariableLengthSegment(
+    List<Map<String, String>> currentRows,
+    String aliasHere,
+    String nextAlias,
+    String edgeType,
+    VariableLengthSpec vlSpec,
+    bool isForward,
+  ) {
+    final nextRows = <Map<String, String>>[];
+    final seen = <String>{};
+
+    for (final row in currentRows) {
+      final srcId = row[aliasHere];
+      if (srcId == null) continue;
+
+      // Find all possible destinations within hop limits
+      final destinations = _findVariableLengthDestinations(
+        srcId, edgeType, vlSpec, isForward
+      );
+
+      for (final destId in destinations) {
+        final newRow = Map<String, String>.from(row);
+        newRow[nextAlias] = destId;
+        final keys = newRow.keys.toList()..sort();
+        final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
+        if (seen.add(sig)) {
+          nextRows.add(newRow);
+        }
+      }
+    }
+
+    return nextRows;
+  }
+
+  /// Finds all destinations reachable via variable-length paths
+  Set<String> _findVariableLengthDestinations(
+    String srcId,
+    String edgeType,
+    VariableLengthSpec vlSpec,
+    bool isForward,
+  ) {
+    final destinations = <String>{};
+    final maxHops = vlSpec.effectiveMaxHops;
+    final minHops = vlSpec.effectiveMinHops;
+
+    // Use breadth-first search to find all reachable nodes within hop limits
+    final queue = <({String nodeId, int hops})>[];
+    final visited = <String, int>{}; // node -> minimum hops to reach it
+
+    queue.add((nodeId: srcId, hops: 0));
+    visited[srcId] = 0;
+
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+
+      // If we've reached the minimum hops, this is a valid destination
+      if (current.hops >= minHops && current.nodeId != srcId) {
+        destinations.add(current.nodeId);
+      }
+
+      // Continue exploring if we haven't reached max hops
+      if (current.hops < maxHops) {
+        final neighbors = isForward
+            ? graph.outNeighbors(current.nodeId, edgeType)
+            : graph.inNeighbors(current.nodeId, edgeType);
+
+        for (final neighbor in neighbors) {
+          final newHops = current.hops + 1;
+          if (!visited.containsKey(neighbor) || visited[neighbor]! > newHops) {
+            visited[neighbor] = newHops;
+            queue.add((nodeId: neighbor, hops: newHops));
+          }
+        }
+      }
+    }
+
+    return destinations;
+  }
+
   Map<String, Set<String>> match(String pattern, {String? startId}) {
-    // Use matchPaths to get correct connected paths only
     final paths = matchPaths(pattern, startId: startId);
-
-    // Extract nodes from actual paths
     final results = <String, Set<String>>{};
     for (final path in paths) {
       for (final entry in path.nodes.entries) {
@@ -172,344 +250,233 @@ class PatternQuery<N extends Node> {
     return results;
   }
 
-  /// Executes multiple patterns and unions the results by variable name.
-  ///
-  /// This method is equivalent to running multiple independent queries and
-  /// combining their results, similar to multiple MATCH clauses in Cypher.
-  /// Results are unioned - if the same node ID appears in multiple patterns
-  /// for the same variable, it appears only once in the final result.
-  ///
-  /// Parameters:
-  /// - [patterns]: List of pattern strings to execute
-  /// - [startId]: Optional starting node ID applied to all patterns
-  ///
-  /// Returns a map where each key is a variable name and each value is the
-  /// union of all node IDs matching that variable across all patterns.
-  ///
-  /// Example:
-  /// ```dart
-  /// final results = query.matchMany([
-  ///   'user-[:HAS_CLIENT]->client',
-  ///   'user-[:MEMBER_OF]->group-[:SOURCE]->policy',
-  ///   'user-[:MEMBER_OF]->group-[:DESTINATION]->asset',
-  /// ], startId: 'u1');
-  ///
-  /// // Results contain all related entities from the user
-  /// print(results['client']); // All clients
-  /// print(results['group']);  // All groups
-  /// print(results['policy']); // All policies
-  /// print(results['asset']);  // All assets
-  /// ```
-  Map<String, Set<String>> matchMany(List<String> patterns, {String? startId}) {
-    final combined = <String, Set<String>>{};
-
-    for (final pattern in patterns) {
-      final results = match(pattern, startId: startId);
-      for (final entry in results.entries) {
-        combined.putIfAbsent(entry.key, () => {}).addAll(entry.value);
-      }
-    }
-
-    return combined;
-  }
-
-  /// Executes a pattern and returns row-wise bindings, similar to Cypher MATCH results.
-  ///
-  /// Unlike [match] which groups results by variable name, this method returns
-  /// each complete path as a separate row, preserving the relationships between
-  /// variables. This is useful when you need to know which specific combinations
-  /// of nodes are connected.
-  ///
-  /// Each row is a map from variable name to the specific node ID matched in
-  /// that path traversal.
-  ///
-  /// Parameters:
-  /// - [pattern]: The pattern string to execute
-  /// - [startId]: Optional starting node ID
-  ///
-  /// Returns a list of maps, where each map represents one complete path match.
-  ///
-  /// Example:
-  /// ```dart
-  /// final rows = query.matchRows(
-  ///   'user-[:MEMBER_OF]->group-[:SOURCE]->policy-[:DESTINATION]->asset',
-  ///   startId: 'u1'
-  /// );
-  ///
-  /// // Each row shows a complete path:
-  /// // [{user: u1, group: g1, policy: p1, asset: a1},
-  /// //  {user: u1, group: g1, policy: p2, asset: a2},
-  /// //  {user: u1, group: g2, policy: p3, asset: a3}]
-  ///
-  /// // Build asset -> policies mapping from rows
-  /// final assetToPolicies = <String, Set<String>>{};
-  /// for (final row in rows) {
-  ///   final asset = row['asset']!;
-  ///   final policy = row['policy']!;
-  ///   assetToPolicies.putIfAbsent(asset, () => {}).add(policy);
-  /// }
-  /// ```
-  List<Map<String, String>> matchRows(String pattern, {String? startId}) {
-    // Strip optional MATCH keyword (Cypher compatibility)
-    var cleanPattern = pattern.trim();
-    if (cleanPattern.toUpperCase().startsWith('MATCH ')) {
-      cleanPattern = cleanPattern.substring(6).trim();
-    }
-
-    // Empty or whitespace-only pattern -> no results
-    if (cleanPattern.isEmpty) return const <Map<String, String>>[];
-
-    // Malformed edge bracket usage: has '[' but no matching ']'
-    if (cleanPattern.contains('[') && !cleanPattern.contains(']')) {
-      return const <Map<String, String>>[];
-    }
-
-    // Split by arrows while preserving direction metadata, but ignore arrows inside []
-    final parts = <String>[];
-    final directions = <bool>[]; // true = forward (->), false = backward (<-)
-
-    int i = 0;
-    int bracketDepth = 0; // depth in square brackets
-    int lastSplit = 0;
-    while (i < cleanPattern.length) {
-      final ch = cleanPattern[i];
-      if (ch == '[') {
-        bracketDepth++;
-        i++;
-        continue;
-      }
-      if (ch == ']') {
-        bracketDepth = bracketDepth > 0 ? bracketDepth - 1 : -1;
-        if (bracketDepth < 0) {
-          // Unbalanced bracket -> malformed
-          return const <Map<String, String>>[];
-        }
-        i++;
-        continue;
-      }
-      if (bracketDepth == 0) {
-        // forward ->
-        if (ch == '-' && i + 1 < cleanPattern.length && cleanPattern[i + 1] == '>') {
-          parts.add(cleanPattern.substring(lastSplit, i));
-          directions.add(true);
-          i += 2;
-          lastSplit = i;
-          continue;
-        }
-        // backward <-
-        if (ch == '<' && i + 1 < cleanPattern.length && cleanPattern[i + 1] == '-') {
-          parts.add(cleanPattern.substring(lastSplit, i));
-          directions.add(false);
-          i += 2;
-          lastSplit = i;
-          continue;
-        }
-      }
-      i++;
-    }
-    // final segment
-    parts.add(cleanPattern.substring(lastSplit));
-
-    if (parts.isEmpty) return const <Map<String, String>>[];
-
-    // Helper to extract alias name from a part
-    String aliasOf(String part) {
-      if (part.startsWith('[')) {
-        // Part starts with edge info like "[:EDGE]-varname"
-        final afterEdge = part.substring(part.indexOf('-') + 1);
-        return afterEdge.split(RegExp(r'[-\[:]')).first.trim();
-      } else {
-        // Normal case: "varname" or "varname:Type" or "varname-[:EDGE]"
-        return part.split(RegExp(r'[-\[:]')).first.trim();
-      }
-    }
-
-    // Seed rows
-    List<Map<String, String>> currentRows = <Map<String, String>>[];
-    final firstAlias = aliasOf(parts.first);
-    if (firstAlias.isEmpty) {
-      return const <Map<String, String>>[];
-    }
-    if (startId != null) {
-      currentRows = <Map<String, String>>[
-        {firstAlias: startId},
-      ];
-    } else {
-      // Parse optional type and label filter in first segment
-      String descriptor = firstAlias; // e.g., user:User{label~Mark}
-      String? nodeType;
-      String? labelOp; // '=' or '~'
-      String? labelVal;
-
-      // If alias actually contains :Type and/or {label...} they would have been included in the part
-      // Recompute using the full first part instead of just alias
-      descriptor = parts.first.split(RegExp(r'[-\[]')).first.trim();
-      String head = descriptor;
-      final braceStart = descriptor.indexOf('{');
-      if (braceStart != -1) {
-        if (!descriptor.endsWith('}')) {
-          // malformed label filter
-          return const <Map<String, String>>[];
-        }
-        head = descriptor.substring(0, braceStart).trim();
-        final inside = descriptor
-            .substring(braceStart + 1, descriptor.length - 1)
-            .trim();
-        final m = RegExp(r'^label\s*([=~])\s*(.+)$').firstMatch(inside);
-        if (m != null) {
-          labelOp = m.group(1);
-          labelVal = m.group(2);
-          if (labelVal == null || labelVal.trim().isEmpty) {
-            return const <Map<String, String>>[];
-          }
-        } else if (inside.isNotEmpty) {
-          return const <Map<String, String>>[];
-        }
-      }
-      if (head.contains(':')) {
-        final typeParts = head.split(':');
-        nodeType = typeParts.length > 1 ? typeParts[1].trim() : null;
-      }
-
-
-      // Seed by scanning nodes matching type/label
-      for (final node in graph.nodesById.values) {
-        if (nodeType != null && node.type != nodeType) continue;
-        if (labelOp != null && labelVal != null) {
-          if (labelOp == '=') {
-            if (node.label != labelVal) continue;
-          } else if (labelOp == '~') {
-            final hay = node.label.toLowerCase();
-            final needle = labelVal.toLowerCase();
-            if (!hay.contains(needle)) continue;
-          }
-        }
-        currentRows.add({firstAlias: node.id});
-      }
-    }
-
-    // Traverse over each hop, expanding rows
-    for (var i = 0; i < parts.length - 1; i++) {
-      final part = parts[i];
-      final aliasHere = aliasOf(part);
-      final nextAlias = aliasOf(parts[i + 1]);
-
-      // For backward patterns, edge info is in the next part
-      final isForward = directions[i];
-      final edgePart = isForward ? part : parts[i + 1];
-      final edgeType = _edgeTypeFrom(edgePart);
-      if (edgeType == null) {
-        // No edge specified; cannot advance
-        return const <Map<String, String>>[];
-      }
-      final edgeTypeTrimmed = edgeType.trim();
-      if (edgeTypeTrimmed.isEmpty) return const <Map<String, String>>[];
-
-      final nextRows = <Map<String, String>>[];
-      final seen = <String>{}; // dedupe identical rows
-
-      for (final row in currentRows) {
-        final srcId = row[aliasHere];
-        if (srcId == null) continue;
-        final neighbors = isForward
-            ? graph.outNeighbors(srcId, edgeTypeTrimmed)
-            : graph.inNeighbors(srcId, edgeTypeTrimmed);
-        for (final nb in neighbors) {
-          final newRow = Map<String, String>.from(row);
-          newRow[nextAlias] = nb;
-          // Row signature for dedupe: stable by sorting keys
-          final keys = newRow.keys.toList()..sort();
-          final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
-          if (seen.add(sig)) {
-            nextRows.add(newRow);
-          }
-        }
-      }
-
-      currentRows = nextRows;
-      if (currentRows.isEmpty) break; // no more matches possible
-    }
-
-    return currentRows;
-  }
-
-  /// Execute multiple patterns and concatenate row results (deduplicated).
-  List<Map<String, String>> matchRowsMany(
-    List<String> patterns, {
-    String? startId,
-  }) {
-    final out = <Map<String, String>>[];
-    final seen = <String>{};
-    for (final p in patterns) {
-      final rows = matchRows(p, startId: startId);
-      for (final r in rows) {
-        final keys = r.keys.toList()..sort();
-        final sig = keys.map((k) => '$k=${r[k]}').join('|');
-        if (seen.add(sig)) out.add(r);
-      }
-    }
-    return out;
-  }
-
-  /// Executes a pattern and returns complete path information including edges.
-  ///
-  /// Similar to [matchRows] but returns [PathMatch] objects that include both
-  /// the node mappings and the ordered edges in each path, providing complete
-  /// path information like Neo4j.
-  ///
-  /// Each [PathMatch] contains:
-  /// - `nodes`: Map of variable names to node IDs (same as matchRows)
-  /// - `edges`: Ordered list of [PathEdge] objects showing connections
-  ///
-  /// Example:
-  /// ```dart
-  /// final paths = query.matchPaths('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project');
-  /// for (final path in paths) {
-  ///   print('Nodes: ${path.nodes}'); // {person: alice, team: engineering, project: web_app}
-  ///   for (final edge in path.edges) {
-  ///     print(edge); // person(alice) -[:WORKS_FOR]-> team(engineering)
-  ///   }
-  /// }
-  /// ```
-  ///
-  /// Returns a list of [PathMatch] objects, where each represents one complete
-  /// path through the graph with both node and edge information.
   List<PathMatch> matchPaths(String pattern, {String? startId}) {
-    // First get the regular row results
     final rows = matchRows(pattern, startId: startId);
-
-    // Convert each row to a PathMatch with edge information
     final pathMatches = <PathMatch>[];
-
     for (final row in rows) {
       final edges = _buildEdgesForRow(pattern, row);
       pathMatches.add(PathMatch(nodes: row, edges: edges));
     }
-
     return pathMatches;
   }
 
-  /// Execute multiple patterns and return path matches with edge information.
-  ///
-  /// Similar to [matchRowsMany] but returns [PathMatch] objects with complete
-  /// path information including edges.
-  List<PathMatch> matchPathsMany(List<String> patterns, {String? startId}) {
-    final out = <PathMatch>[];
-    final seen = <String>{};
+  // Extract segments and directions from parse tree (visible for testing)
+  void extractPartsFromParseTreeForTesting(dynamic parseTree, List<String> parts, List<bool> directions) {
+    _extractPartsFromParseTree(parseTree, parts, directions);
+  }
 
-    for (final pattern in patterns) {
-      final paths = matchPaths(pattern, startId: startId);
-      for (final path in paths) {
-        final keys = path.nodes.keys.toList()..sort();
-        final sig = keys.map((k) => '$k=${path.nodes[k]}').join('|');
-        if (seen.add(sig)) out.add(path);
+  void _extractPartsFromParseTree(dynamic parseTree, List<String> parts, List<bool> directions) {
+    if (parseTree is! List) return;
+
+    // First element is the initial segment
+    final firstSegment = parseTree[0];
+    parts.add(_flattenSegment(firstSegment));
+
+    // Remaining elements are [connection, segment] pairs
+    if (parseTree.length > 1 && parseTree[1] is List) {
+      final connections = parseTree[1] as List;
+      for (final connectionPair in connections) {
+        if (connectionPair is List && connectionPair.length >= 2) {
+          final connection = connectionPair[0];
+          final segment = connectionPair[1];
+
+          // Determine direction from connection
+          final connectionStr = _flattenConnection(connection);
+          directions.add(connectionStr.contains('->'));
+
+          // Add edge info to the appropriate part based on direction
+          final edgeInfo = _extractEdgeFromConnection(connection);
+          final isForward = connectionStr.contains('->');
+
+          if (isForward) {
+            // Forward: edge info goes with current (source) part
+            if (parts.isNotEmpty && edgeInfo.isNotEmpty) {
+              parts[parts.length - 1] = parts[parts.length - 1] + edgeInfo;
+            }
+            parts.add(_flattenSegment(segment));
+          } else {
+            // Backward: edge info goes with next (target) part
+            final nextSegment = _flattenSegment(segment);
+            if (edgeInfo.isNotEmpty) {
+              parts.add(nextSegment + edgeInfo);
+            } else {
+              parts.add(nextSegment);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  String _extractEdgeFromConnection(dynamic connection) {
+    final connectionStr = _flattenToString(connection);
+    // Extract edge type like [:WORKS_FOR] or [:WORKS_FOR*1..3] from connection
+    final match = RegExp(r'\[([^\]]+)\]').firstMatch(connectionStr);
+    return match != null ? '${match.group(0)}' : '';
+  }
+
+  /// Extracts variable-length specification from edge string
+  VariableLengthSpec? _extractVariableLengthSpec(String edgeStr) {
+    // Look for patterns like [:TYPE*], [:TYPE*1..3], [:TYPE*2..], [:TYPE*..5]
+    final match = RegExp(r'\[:([^\*]+)\*([^\]]*)]').firstMatch(edgeStr);
+    if (match == null) return null;
+
+    final vlPart = match.group(2) ?? '';
+    if (vlPart.isEmpty) {
+      // Just * means unlimited
+      return const VariableLengthSpec();
+    }
+
+    // Parse patterns like "1..3", "2..", "..5"
+    if (vlPart.contains('..')) {
+      final parts = vlPart.split('..');
+      final minStr = parts[0];
+      final maxStr = parts.length > 1 ? parts[1] : '';
+
+      final min = minStr.isNotEmpty ? int.tryParse(minStr) : null;
+      final max = maxStr.isNotEmpty ? int.tryParse(maxStr) : null;
+
+      return VariableLengthSpec(minHops: min, maxHops: max);
+    }
+
+    // Single number like "3" (from "*3") means exactly 3 hops
+    final exactHops = int.tryParse(vlPart.trim());
+    if (exactHops != null) {
+      return VariableLengthSpec(minHops: exactHops, maxHops: exactHops);
+    }
+
+    return const VariableLengthSpec(); // Default to unlimited
+  }
+
+
+  String _flattenSegment(dynamic segment) {
+    if (segment is List && segment.length >= 3) {
+      final variable = _flattenToString(segment[0]);
+      final nodeType = segment[1] != null ? ':${_flattenToString(segment[1]).replaceFirst(':', '')}' : '';
+      final labelFilter = segment[2] != null ? _flattenToString(segment[2]) : '';
+      return variable + nodeType + labelFilter;
+    }
+    return _flattenToString(segment);
+  }
+
+  String _flattenConnection(dynamic connection) {
+    return _flattenToString(connection);
+  }
+
+  String _flattenToString(dynamic obj) {
+    if (obj is String) return obj;
+    if (obj is List) {
+      return obj.map((e) => _flattenToString(e)).join('');
+    }
+    return obj?.toString() ?? '';
+  }
+
+  void _seedFromFirstSegment(String firstPart, String firstAlias, List<Map<String, String>> currentRows) {
+    // Extract type and label info from the first part string
+    // Since we already flattened the parse tree to a string, we can parse it similar to original
+    String? nodeType;
+    String? labelOp; // '=' or '~'
+    String? labelVal;
+
+    // Remove edge info from descriptor for seeding (e.g., "person:Person[:WORKS_FOR]" -> "person:Person")
+    String descriptor = firstPart;
+    final edgeStart = descriptor.indexOf('[');
+    if (edgeStart != -1) {
+      descriptor = descriptor.substring(0, edgeStart);
+    }
+    String head = descriptor;
+
+    // Handle label filter
+    final braceStart = descriptor.indexOf('{');
+    if (braceStart != -1) {
+      if (!descriptor.endsWith('}')) {
+        return; // malformed label filter
+      }
+      head = descriptor.substring(0, braceStart).trim();
+      final inside = descriptor
+          .substring(braceStart + 1, descriptor.length - 1)
+          .trim();
+      final m = RegExp(r'^label\s*([=~])\s*(.+)$').firstMatch(inside);
+      if (m != null) {
+        labelOp = m.group(1);
+        labelVal = m.group(2);
+        if (labelVal == null || labelVal.trim().isEmpty) {
+          return;
+        }
+      } else if (inside.isNotEmpty) {
+        return; // malformed
       }
     }
 
-    return out;
+    // Handle node type
+    if (head.contains(':')) {
+      final typeParts = head.split(':');
+      nodeType = typeParts.length > 1 ? typeParts[1].trim() : null;
+    }
+
+    // Seed by scanning nodes matching type/label (copied from original)
+    for (final node in graph.nodesById.values) {
+      if (nodeType != null && node.type != nodeType) continue;
+      if (labelOp != null && labelVal != null) {
+        if (labelOp == '=') {
+          if (node.label != labelVal) continue;
+        } else if (labelOp == '~') {
+          final hay = node.label.toLowerCase();
+          final needle = labelVal.toLowerCase();
+          if (!hay.contains(needle)) continue;
+        }
+      }
+      currentRows.add({firstAlias: node.id});
+    }
   }
 
-  /// Build PathEdge objects for a given row result by parsing the pattern.
+  // Copied helper methods from original parser
+  String? _edgeTypeFrom(String segment) {
+    for (int i = 0; i < segment.length; i++) {
+      if (segment[i] == '[') {
+        int j = i + 1;
+        while (j < segment.length && segment[j].trim().isEmpty) {
+          j++;
+        }
+        bool foundColon = false;
+        while (j < segment.length) {
+          final c = segment[j];
+          if (c == ':') {
+            foundColon = true;
+            j++;
+            break;
+          }
+          if (c == ']') break;
+          j++;
+        }
+        if (!foundColon) continue;
+
+        int depth = 1;
+        final contentStart = j;
+        int k = j;
+        while (k < segment.length) {
+          final c = segment[k];
+          if (c == '[') {
+            depth++;
+          } else if (c == ']') {
+            depth--;
+            if (depth == 0) {
+              // Extract just the edge type (before *)
+              final fullContent = segment.substring(contentStart, k);
+              if (fullContent.contains('*')) {
+                return fullContent.split('*')[0];
+              }
+              return fullContent;
+            }
+          }
+          k++;
+        }
+        return null;
+      }
+    }
+    return null;
+  }
+
   List<PathEdge> _buildEdgesForRow(String pattern, Map<String, String> row) {
     final edges = <PathEdge>[];
 
@@ -651,61 +618,9 @@ class PatternQuery<N extends Node> {
     return varName.isEmpty ? null : varName;
   }
 
-  /// Parse edge type from a segment containing an edge block like "[ : TYPE ]".
-  /// Supports nested square brackets inside TYPE and arbitrary characters.
-  String? _edgeTypeFrom(String segment) {
-    // Find '[' that begins an edge block
-    for (int i = 0; i < segment.length; i++) {
-      if (segment[i] == '[') {
-        // Scan to ':' before the matching ']' (allow whitespace)
-        int j = i + 1;
-        while (j < segment.length && segment[j].trim().isEmpty) {
-          j++;
-        }
-        bool foundColon = false;
-        while (j < segment.length) {
-          final c = segment[j];
-          if (c == ':') {
-            foundColon = true;
-            j++;
-            break;
-          }
-          if (c == ']') break;
-          j++;
-        }
-        if (!foundColon) continue; // not an edge block
-
-        // Now scan to matching closing bracket with nesting
-        int depth = 1;
-        final contentStart = j;
-        int k = j;
-        while (k < segment.length) {
-          final c = segment[k];
-          if (c == '[') {
-            depth++;
-          } else if (c == ']') {
-            depth--;
-            if (depth == 0) {
-              return segment.substring(contentStart, k);
-            }
-          }
-          k++;
-        }
-        return null; // unbalanced
-      }
-    }
-    return null;
-  }
-
-  // --- Utility finder methods ---
+  // --- Utility finder methods (copied from original) ---
 
   /// Finds all node IDs with the given [type].
-  ///
-  /// Example:
-  /// ```dart
-  /// final userIds = query.findByType('User');
-  /// print(userIds); // {'u1', 'u2', 'u3'}
-  /// ```
   Set<String> findByType(String type) {
     return graph.nodesById.values
         .where((n) => n.type == type)
@@ -714,16 +629,6 @@ class PatternQuery<N extends Node> {
   }
 
   /// Finds node IDs whose label exactly matches [label].
-  ///
-  /// Parameters:
-  /// - [label]: The exact label to match
-  /// - [caseInsensitive]: Whether to ignore case (default: false)
-  ///
-  /// Example:
-  /// ```dart
-  /// final aliceIds = query.findByLabelEquals('Alice');
-  /// final anyAlice = query.findByLabelEquals('alice', caseInsensitive: true);
-  /// ```
   Set<String> findByLabelEquals(String label, {bool caseInsensitive = false}) {
     if (!caseInsensitive) {
       return graph.nodesById.values
@@ -739,16 +644,6 @@ class PatternQuery<N extends Node> {
   }
 
   /// Finds node IDs whose label contains the substring [contains].
-  ///
-  /// Parameters:
-  /// - [contains]: The substring to search for
-  /// - [caseInsensitive]: Whether to ignore case (default: true)
-  ///
-  /// Example:
-  /// ```dart
-  /// final matchingIds = query.findByLabelContains('admin');
-  /// // Finds 'Administrator', 'admin', 'Admins', etc.
-  /// ```
   Set<String> findByLabelContains(
     String contains, {
     bool caseInsensitive = true,
@@ -765,27 +660,14 @@ class PatternQuery<N extends Node> {
   }
 
   /// Returns outbound neighbors from [srcId] via [edgeType].
-  ///
-  /// This is a convenience wrapper around `graph.outNeighbors()`.
   Set<String> outFrom(String srcId, String edgeType) =>
       graph.outNeighbors(srcId, edgeType);
 
   /// Returns inbound neighbors to [dstId] via [edgeType].
-  ///
-  /// This is a convenience wrapper around `graph.inNeighbors()`.
   Set<String> inTo(String dstId, String edgeType) =>
       graph.inNeighbors(dstId, edgeType);
 
   /// Finds all destinations reachable via [edgeType] from any source in [srcIds].
-  ///
-  /// Useful for expanding from multiple starting points in one operation.
-  ///
-  /// Example:
-  /// ```dart
-  /// final groupIds = {'g1', 'g2', 'g3'};
-  /// final allPolicies = query.findByEdgeFrom(groupIds, 'SOURCE');
-  /// print(allPolicies); // All policies from any of these groups
-  /// ```
   Set<String> findByEdgeFrom(Iterable<String> srcIds, String edgeType) {
     final out = <String>{};
     for (final id in srcIds) {
@@ -795,15 +677,6 @@ class PatternQuery<N extends Node> {
   }
 
   /// Finds all sources that can reach any destination in [dstIds] via [edgeType].
-  ///
-  /// Useful for backward expansion from multiple destination points.
-  ///
-  /// Example:
-  /// ```dart
-  /// final assetIds = {'a1', 'a2', 'a3'};
-  /// final allGroups = query.findByEdgeTo(assetIds, 'DESTINATION');
-  /// print(allGroups); // All groups that have access to any of these assets
-  /// ```
   Set<String> findByEdgeTo(Iterable<String> dstIds, String edgeType) {
     final ins = <String>{};
     for (final id in dstIds) {
@@ -811,4 +684,229 @@ class PatternQuery<N extends Node> {
     }
     return ins;
   }
+
+  /// Execute multiple patterns and concatenate row results (deduplicated).
+  List<Map<String, String>> matchRowsMany(
+    List<String> patterns, {
+    String? startId,
+  }) {
+    final out = <Map<String, String>>[];
+    final seen = <String>{};
+    for (final p in patterns) {
+      final rows = matchRows(p, startId: startId);
+      for (final r in rows) {
+        final keys = r.keys.toList()..sort();
+        final sig = keys.map((k) => '$k=${r[k]}').join('|');
+        if (seen.add(sig)) out.add(r);
+      }
+    }
+    return out;
+  }
+
+  /// Execute multiple patterns and unions the results by variable name.
+  Map<String, Set<String>> matchMany(List<String> patterns, {String? startId}) {
+    final combined = <String, Set<String>>{};
+    for (final pattern in patterns) {
+      final results = match(pattern, startId: startId);
+      for (final entry in results.entries) {
+        combined.putIfAbsent(entry.key, () => {}).addAll(entry.value);
+      }
+    }
+    return combined;
+  }
+
+  /// Execute multiple patterns and return path matches with edge information.
+  List<PathMatch> matchPathsMany(List<String> patterns, {String? startId}) {
+    final out = <PathMatch>[];
+    final seen = <String>{};
+    for (final pattern in patterns) {
+      final paths = matchPaths(pattern, startId: startId);
+      for (final path in paths) {
+        final keys = path.nodes.keys.toList()..sort();
+        final sig = keys.map((k) => '$k=${path.nodes[k]}').join('|');
+        if (seen.add(sig)) out.add(path);
+      }
+    }
+    return out;
+  }
+
+  /// Apply WHERE clause filtering to rows
+  List<Map<String, String>> _applyWhereClause(List<Map<String, String>> rows, dynamic whereClause) {
+    if (whereClause == null) return rows;
+
+    return rows.where((row) => _evaluateWhereExpression(row, whereClause)).toList();
+  }
+
+  bool _evaluateWhereExpression(Map<String, String> row, dynamic whereExpr) {
+    if (whereExpr is! List) return true;
+
+    // Navigate to the actual WHERE expression content
+    // Structure: [WHERE, whitespace, expression]
+    if (whereExpr.length >= 3 && whereExpr[0] == 'WHERE') {
+      return _evaluateExpression(row, whereExpr[2]);
+    }
+
+    // Direct expression evaluation
+    return _evaluateExpression(row, whereExpr);
+  }
+
+  bool _evaluateExpression(Map<String, String> row, dynamic expr) {
+    if (expr is! List) return true;
+    if (expr.isEmpty) return true;
+
+    // Handle OR expressions (lower precedence)
+    // Structure: [first_term, [OR_operations]*]
+    if (expr.length >= 2 && expr[1] is List) {
+      final orOperations = expr[1] as List;
+      bool result = _evaluateAndExpression(row, expr[0]);
+
+      for (final op in orOperations) {
+        if (op is List && op.length >= 4 && _containsString(op, 'OR')) {
+          final rightExpr = op[3]; // The expression after OR
+          final rightResult = _evaluateAndExpression(row, rightExpr);
+          result = result || rightResult;
+        }
+      }
+      return result;
+    }
+
+    // Single expression (no OR)
+    return _evaluateAndExpression(row, expr);
+  }
+
+  bool _evaluateAndExpression(Map<String, String> row, dynamic expr) {
+    if (expr is! List) return true;
+    if (expr.isEmpty) return true;
+
+    // Handle AND expressions (higher precedence)
+    // Structure: [first_term, [AND_operations]*]
+    if (expr.length >= 2 && expr[1] is List) {
+      final andOperations = expr[1] as List;
+      bool result = _evaluatePrimaryExpression(row, expr[0]);
+
+      for (final op in andOperations) {
+        if (op is List && op.length >= 4 && _containsString(op, 'AND')) {
+          final rightExpr = op[3]; // The expression after AND
+          final rightResult = _evaluatePrimaryExpression(row, rightExpr);
+          result = result && rightResult;
+        }
+      }
+      return result;
+    }
+
+    // Single expression (no AND)
+    return _evaluatePrimaryExpression(row, expr);
+  }
+
+  bool _evaluatePrimaryExpression(Map<String, String> row, dynamic expr) {
+    if (expr is! List) return true;
+    if (expr.isEmpty) return true;
+
+    // Check for parenthesized expressions: [('(', whitespace, content, whitespace, ')')]
+    if (expr.length == 5 && expr[0] == '(' && expr[4] == ')') {
+      return _evaluateExpression(row, expr[2]); // Evaluate the content inside parentheses
+    }
+
+    // Check for comparison expressions: [property_expr, whitespace, operator, whitespace, value]
+    if (expr.length == 5) {
+      return _evaluateComparisonExpression(row, expr);
+    }
+
+    return true;
+  }
+
+  bool _evaluateComparisonExpression(Map<String, String> row, dynamic expr) {
+    if (expr is! List || expr.length != 5) return false;
+
+    // Extract property expression (e.g., "person.age")
+    final propertyExpr = expr[0];
+    final operator = expr[2];
+    final valueExpr = expr[4];
+
+    final propertyStr = _flattenToString(propertyExpr);
+    final operatorStr = _flattenToString(operator);
+    final valueStr = _flattenToString(valueExpr);
+
+    // Parse property.field
+    final propMatch = RegExp(r'(\w+)\.(\w+)').firstMatch(propertyStr);
+    if (propMatch == null) return false; // Invalid property syntax should fail
+
+    final variable = propMatch.group(1)!;
+    final property = propMatch.group(2)!;
+
+    // Get node ID from row
+    final nodeId = row[variable];
+    if (nodeId == null) return false; // Variable doesn't exist in row should fail
+
+    // Get node from graph
+    final node = graph.nodesById[nodeId];
+    if (node == null) return false; // Node doesn't exist should fail
+
+    // Get property value
+    final propValue = node.properties?[property];
+    if (propValue == null) return false;
+
+    // Parse comparison value
+    final comparisonValue = _parseValue(valueStr);
+
+    return _compareValues(propValue, operatorStr, comparisonValue);
+  }
+
+  dynamic _parseValue(String valueStr) {
+    final trimmed = valueStr.trim();
+
+    // String literal
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      return trimmed.substring(1, trimmed.length - 1);
+    }
+
+    // Number
+    final numValue = int.tryParse(trimmed);
+    if (numValue != null) return numValue;
+
+    final doubleValue = double.tryParse(trimmed);
+    if (doubleValue != null) return doubleValue;
+
+    return trimmed;
+  }
+
+  bool _compareValues(dynamic propValue, String operator, dynamic comparisonValue) {
+    try {
+      // Convert both values to the same type for comparison
+      if (propValue is num && comparisonValue is num) {
+        switch (operator) {
+          case '>': return propValue > comparisonValue;
+          case '<': return propValue < comparisonValue;
+          case '>=': return propValue >= comparisonValue;
+          case '<=': return propValue <= comparisonValue;
+          case '=': return propValue == comparisonValue;
+          case '!=': return propValue != comparisonValue;
+        }
+      } else {
+        // String comparison
+        final propStr = propValue.toString();
+        final compStr = comparisonValue.toString();
+
+        switch (operator) {
+          case '=': return propStr == compStr;
+          case '!=': return propStr != compStr;
+          default: return false; // Other operators not supported for strings
+        }
+      }
+    } catch (e) {
+      return false;
+    }
+    return false;
+  }
+
+  bool _containsString(dynamic expr, String target) {
+    if (expr is String) return expr == target;
+    if (expr is List) {
+      for (final item in expr) {
+        if (_containsString(item, target)) return true;
+      }
+    }
+    return false;
+  }
+
 }

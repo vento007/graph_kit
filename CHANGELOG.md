@@ -1,4 +1,28 @@
 
+## 0.7.0
+
+### Breaking Changes
+- **Unified parser implementation**: PatternQuery now uses PetitParser implementation by default
+- **All advanced features now available**: WHERE clauses, variable-length paths, and parentheses support are now part of the main PatternQuery class
+- **Enhanced functionality**: The main PatternQuery class now includes all features previously available only in PetitPatternQuery
+
+### Major Improvements
+- **Single parser implementation**: Removed duplicate parser implementations for better maintainability
+- **Full Cypher feature set**: All Cypher-like features (WHERE, variable-length, parentheses) are now unified
+- **Better performance**: Grammar-based parsing with proper parse tree evaluation
+- **Future-ready architecture**: Solid foundation for additional Cypher features
+
+### Migration Notes
+- **API compatibility**: All existing PatternQuery usage remains the same - no code changes needed
+- **Enhanced capabilities**: Your existing code now automatically gets WHERE clause and variable-length path support
+- **Import changes**: Remove any direct imports of `pattern_query_petit.dart` - use main library export instead
+
+### Technical Details
+- Replaced string-based parsing with proper PetitParser grammar
+- Unified PathEdge and PathMatch classes
+- Complete test suite validation with 149+ passing tests
+- All utility methods preserved and enhanced
+
 ## 0.6.11
 
 ### Added

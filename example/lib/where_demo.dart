@@ -30,7 +30,7 @@ class WhereClauseDemo extends StatefulWidget {
 
 class _WhereClauseDemoState extends State<WhereClauseDemo> {
   late Graph<Node> graph;
-  late PetitPatternQuery<Node> query;
+  late PatternQuery<Node> query;
   final TextEditingController _queryController = TextEditingController();
   List<Map<String, String>> _results = [];
   String? _error;
@@ -114,7 +114,7 @@ class _WhereClauseDemoState extends State<WhereClauseDemo> {
 
   void _initializeGraph() {
     graph = Graph<Node>();
-    query = PetitPatternQuery(graph);
+    query = PatternQuery(graph);
 
     // Create comprehensive test data
     _addPeople();
@@ -496,14 +496,19 @@ class _WhereClauseDemoState extends State<WhereClauseDemo> {
               'Data Overview',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            const Text(
+              'Available Node Types:',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
-                _buildDataStat('People', '10', Icons.person),
+                _buildDataStat('People (10)', 'person:Person', Icons.person),
                 const SizedBox(width: 24),
-                _buildDataStat('Teams', '4', Icons.group),
+                _buildDataStat('Teams (4)', 'team:Team', Icons.group),
                 const SizedBox(width: 24),
-                _buildDataStat('Projects', '5', Icons.work),
+                _buildDataStat('Projects (5)', 'project:Project', Icons.work),
               ],
             ),
             const SizedBox(height: 16),
@@ -525,21 +530,51 @@ class _WhereClauseDemoState extends State<WhereClauseDemo> {
                 _buildPropertyChip('project.budget', 'number'),
               ],
             ),
+            const SizedBox(height: 16),
+            const Text(
+              'Available Edge Types:',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                _buildEdgeChip('WORKS_FOR', 'Person → Team'),
+                _buildEdgeChip('WORKS_ON', 'Team → Project'),
+                _buildEdgeChip('MANAGES', 'Person → Team'),
+                _buildEdgeChip('LEADS', 'Person → Project'),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildDataStat(String label, String value, IconData icon) {
-    return Row(
+  Widget _buildDataStat(String label, String queryType, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 20, color: Colors.blue.shade600),
-        const SizedBox(width: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: Colors.blue.shade600),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
         Text(
-          '$value $label',
-          style: const TextStyle(fontWeight: FontWeight.w500),
+          queryType,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+            fontFamily: 'monospace',
+          ),
         ),
       ],
     );
@@ -558,6 +593,28 @@ class _WhereClauseDemoState extends State<WhereClauseDemo> {
         color: type == 'number'
           ? Colors.blue.shade200
           : Colors.green.shade200,
+      ),
+    );
+  }
+
+  Widget _buildEdgeChip(String edgeType, String description) {
+    return Chip(
+      label: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            edgeType,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            description,
+            style: const TextStyle(fontSize: 10),
+          ),
+        ],
+      ),
+      backgroundColor: Colors.orange.shade50,
+      side: BorderSide(
+        color: Colors.orange.shade200,
       ),
     );
   }
