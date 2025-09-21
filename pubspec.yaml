@@ -10,7 +10,7 @@ environment:
 
 # No runtime dependencies - pure Dart implementation
 dependencies:
-  petitparser: ^6.0.2
+  petitparser: ^7.0.1
 
 dev_dependencies:
   test: ^1.24.0

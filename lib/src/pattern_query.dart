@@ -212,6 +212,9 @@ class CypherPatternGrammar extends GrammarDefinition {
   Parser stringLiteral() => char('"') & (char('"').neg()).star() & char('"');
 
   Parser numberLiteral() => digit().plus();
+
+  // Helper for optional whitespace
+  Parser optionalWhitespace() => whitespace().star();
 }
 
 /// PetitParser-based pattern query implementation

@@ -269,8 +269,8 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
         expect(spec4, isNotNull);
         expect(spec4!.minHops, isNull);
         expect(spec4!.maxHops, equals(4));
-        expect(spec4.effectiveMinHops, equals(1));
-        expect(spec4.effectiveMaxHops, equals(4));
+        expect(spec4!.effectiveMinHops, equals(1));
+        expect(spec4!.effectiveMaxHops, equals(4));
 
         // Test non-variable-length
         final spec5 = _extractVariableLengthSpecForTesting('[:MANAGES]');
@@ -463,7 +463,7 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
         final grammar = CypherPatternGrammar();
         final parser = grammar.build();
         final parseResult = parser.parse('MATCH person:Person WHERE (person.age > 40 AND person.salary > 100000) OR person.department = "Engineering"');
-        expect(parseResult.isSuccess, isTrue, reason: 'Parentheses should parse successfully');
+        expect(parseResult is! Failure, isTrue, reason: 'Parentheses should parse successfully');
 
         // Test the actual parentheses evaluation
         final results = query.matchRows('MATCH person:Person WHERE (person.age > 40 AND person.salary > 100000) OR person.department = "Engineering"');
@@ -519,6 +519,8 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
         final personIds = results2.map((r) => r['p']).toSet();
         expect(personIds, containsAll(['alice', 'bob']));
       });
+
     });
+
   });
 }
