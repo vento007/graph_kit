@@ -41,7 +41,7 @@ In-memory, typed directed multigraph with:
 - **Typed nodes** (e.g., `Person`, `Team`, `Project`, `Resource`)
 - **Typed edges** (e.g., `WORKS_FOR`, `MANAGES`, `ASSIGNED_TO`, `DEPENDS_ON`)
 - **Multiple relationships** between the same nodes
-- A minimal, Cypher-inspired pattern engine for traversal
+- **Advanced Cypher queries** with WHERE clauses, logical operators, and variable-length paths
 - **Complete path results** with Neo4j-style edge information
 - **Graph algorithms** for analysis (shortest path, connected components, topological sort, reachability)
 
@@ -53,6 +53,7 @@ In-memory, typed directed multigraph with:
 - [4. Generic Traversal Utilities](#4-generic-traversal-utilities)
 - [5. Pattern Query Examples](#5-pattern-query-examples)
 - [6. Mini-Cypher Reference](#6-mini-cypher-reference)
+  - [6.1 Advanced WHERE Clauses and Complex Filtering](#61-advanced-where-clauses-and-complex-filtering)
 - [7. Comparison with Cypher](#7-comparison-with-cypher)
 - [8. Design and performance](#8-design-and-performance)
 - [9. JSON Serialization](#9-json-serialization)
@@ -226,7 +227,45 @@ final allConnections = query.matchMany([
 print(allConnections); // {person: {alice, bob, charlie}, team: {engineering, design, marketing}, project: {web_app}}
 ```
 
-### 2.8 Utility Methods
+### 2.8 WHERE Clause Filtering
+
+```dart
+// Add people with properties for filtering examples
+graph.addNode(Node(
+  id: 'alice',
+  type: 'Person',
+  label: 'Alice Cooper',
+  properties: {'age': 28, 'department': 'Engineering', 'salary': 85000}
+));
+graph.addNode(Node(
+  id: 'bob',
+  type: 'Person',
+  label: 'Bob Wilson',
+  properties: {'age': 35, 'department': 'Engineering', 'salary': 95000}
+));
+
+// Filter by age - query.matchRows returns List<Map<String, String>>
+final seniors = query.matchRows('MATCH person:Person WHERE person.age > 30');
+print(seniors); // [{person: bob}]
+
+// Filter by department - query.matchRows returns List<Map<String, String>>
+final engineers = query.matchRows('MATCH person:Person WHERE person.department = "Engineering"');
+print(engineers); // [{person: alice}, {person: bob}]
+
+// Combine conditions with AND - query.matchRows returns List<Map<String, String>>
+final seniorEngineers = query.matchRows('MATCH person:Person WHERE person.age > 30 AND person.department = "Engineering"');
+print(seniorEngineers); // [{person: bob}]
+
+// Use OR conditions - query.matchRows returns List<Map<String, String>>
+final youngOrWellPaid = query.matchRows('MATCH person:Person WHERE person.age < 30 OR person.salary > 90000');
+print(youngOrWellPaid); // [{person: alice}, {person: bob}]
+
+// Complex filtering with relationships - query.matchRows returns List<Map<String, String>>
+final seniorWorkers = query.matchRows('MATCH person:Person-[:WORKS_FOR]->team:Team WHERE person.age > 30');
+print(seniorWorkers); // [{person: bob, team: engineering}]
+```
+
+### 2.9 Utility Methods
 
 ```dart
 // Find by type, query.findByType returns Set<String>
@@ -250,7 +289,7 @@ final engineeringWorkers = query.inTo('engineering', 'WORKS_FOR');
 print(engineeringWorkers); // {alice, bob}
 ```
 
-### 2.9 Summary of Query Methods
+### 2.10 Summary of Query Methods
 
 | Method | Returns | Use Case |
 |--------|---------|----------|
@@ -446,8 +485,8 @@ Cypher is a language designed to describe patterns in graphs. Instead of writing
 
 GraphKit supports a **subset** of Cypher - the most useful parts without the complexity:
 
-**Supported**: Basic patterns, node types, relationships, label filters, variable-length paths (PetitParser only)
-**Not supported**: Complex WHERE clauses, aggregations
+**Supported**: Basic patterns, node types, relationships, label filters, variable-length paths, WHERE clauses with logical operators, parentheses
+**Not supported**: Aggregations, complex subqueries
 
 This gives you the power of graph queries without learning the full Cypher language.
 
@@ -549,13 +588,13 @@ query.match('person:Person{label~Alice}')
 
 **Remember:** The names you pick (`person`, `team`, etc.) become the keys in your results!
 
-### Variable-Length Paths (PetitParser)
+### Variable-Length Paths
 
 Variable-length paths let you find connections across multiple hops without specifying the exact number of steps:
 
 ```dart
-// Import the PetitParser implementation
-final query = PetitPatternQuery(graph);
+// Use the unified PatternQuery (includes all advanced features)
+final query = PatternQuery(graph);
 
 // Find all direct and indirect reports (1-3 management levels)
 query.match('manager-[:MANAGES*1..3]->subordinate')
@@ -577,16 +616,40 @@ query.match('component-[:DEPENDS_ON*]->dependency')
 - `[:TYPE*..4]` - Up to 4 hops
 - `[:TYPE*2]` - Exactly 2 hops
 
-**Note:** Variable-length paths are only available in `PetitPatternQuery`, not the original `PatternQuery`.
+**Note:** Variable-length paths are fully supported in the unified `PatternQuery` implementation.
+
+### 6.1 Advanced WHERE Clauses and Complex Filtering
+
+For sophisticated filtering beyond basic patterns, GraphKit supports full WHERE clause syntax with logical operators and parentheses.
+
+**[Complete Cypher Query Language Guide](CYPHER_GUIDE.md)**
+
+The comprehensive guide covers:
+- Complex logical expressions with parentheses: `(A AND B) OR (C AND D)`
+- Multiple comparison operators: `>`, `<`, `>=`, `<=`, `=`, `!=`
+- Real-world query examples for HR, project management, and organizational analysis
+- Property filtering best practices and performance tips
+- Error handling and troubleshooting
+
+Quick examples:
+```cypher
+// Complex filtering with parentheses
+MATCH person:Person WHERE (person.age > 40 AND person.salary > 100000) OR person.department = "Management"
+
+// Multi-hop with filtering
+MATCH person:Person-[:WORKS_FOR]->team:Team-[:WORKS_ON]->project:Project WHERE person.salary > 80000 AND project.status = "active"
+```
 
 ## 7. Comparison with Cypher
 
 | Feature               | Real Cypher | graph_kit           |
 |-----------------------|-------------|---------------------|
 | Mixed directions      | Yes         | No                  |
-| Variable length paths | Yes         | Yes (PetitParser)   |
+| Variable length paths | Yes         | Yes                 |
 | Optional matches      | Yes         | Via `matchMany`     |
-| WHERE clauses         | Yes         | Via label filters   |
+| WHERE clauses         | Yes         | Yes                 |
+| Logical operators     | Yes         | Yes (AND, OR)       |
+| Parentheses           | Yes         | Yes                 |
 
 ## 8. Design and performance
 

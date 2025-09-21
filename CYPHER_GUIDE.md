@@ -1,6 +1,6 @@
 # GraphKit Cypher Query Language Guide
 
-note: this is only if using petitparser version of the query parser, the original queryparser does not support all the WHERE clause features and syntax. later this parser will be replacing the original parser.
+GraphKit now includes full WHERE clause support as part of the unified PatternQuery implementation. All features in this guide are available by default.
 
 GraphKit implements a powerful subset of the Cypher query language for graph pattern matching and filtering. This guide covers all supported features with practical examples.
 
