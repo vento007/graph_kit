@@ -653,6 +653,8 @@ The demo includes sample queries, real-time query execution, and a comprehensive
 |-----------------------|-------------|---------------------|
 | Mixed directions      | Yes         | No                  |
 | Variable length paths | Yes         | Yes                 |
+| Multiple edge types   | `[:TYPE1\|TYPE2]` | No                  |
+| Multiple patterns     | `pattern1, pattern2` | No                  |
 | Optional matches      | Yes         | Via `matchMany`     |
 | WHERE clauses         | Yes         | Yes                 |
 | Logical operators     | Yes         | Yes (AND, OR)       |
