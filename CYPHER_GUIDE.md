@@ -326,22 +326,22 @@ MATCH team:Team WHERE
 Common parsing errors and solutions:
 
 ```cypher
-# ❌ Missing quotes for strings
+# Missing quotes for strings
 WHERE person.department = Engineering
 
-# ✅ Correct string syntax
+# Correct string syntax
 WHERE person.department = "Engineering"
 
-# ❌ Invalid operator
+# Invalid operator
 WHERE person.age === 30
 
-# ✅ Correct equality operator
+# Correct equality operator
 WHERE person.age = 30
 
-# ❌ Unmatched parentheses
+# Unmatched parentheses
 WHERE (person.age > 30 AND person.salary > 80000
 
-# ✅ Properly closed parentheses
+# Properly closed parentheses
 WHERE (person.age > 30 AND person.salary > 80000)
 ```
 
