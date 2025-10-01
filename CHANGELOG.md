@@ -1,3 +1,23 @@
+## 0.7.1
+
+### Added
+- **Multiple edge types support**: Use `[:TYPE1|TYPE2|TYPE3]` syntax to match ANY of the specified relationship types
+- OR semantics for edge type matching - matches if any edge type exists
+- Works seamlessly with variable-length paths: `-[:TYPE1|TYPE2*1..3]->`
+- Works with forward, backward, and multi-hop patterns
+- Comprehensive test suite with 15 test cases covering all integration scenarios
+- Updated documentation with examples in README and complete guide in CYPHER_GUIDE.md
+
+### Features
+- Cypher-compliant syntax using `|` separator for multiple types
+- Efficient execution using set unions for neighbor collection
+- Proper edge type detection in PathMatch results
+- Full integration with existing WHERE clauses, variable-length paths, and label filtering
+
+### Documentation
+- Added "Multiple Edge Types" section to CYPHER_GUIDE.md
+- Updated Cypher comparison table in README.md
+- Added pattern query examples demonstrating OR syntax
 
 ## 0.7.0
 
