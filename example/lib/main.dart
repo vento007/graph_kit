@@ -245,7 +245,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       final results = query.match(pattern);
       final paths = query.matchPaths(pattern);
       lastPattern = pattern;
-      _highlightEdgeTypes = _extractEdgeTypes(pattern);
+      _highlightEdgeTypes = _extractEdgeTypes(paths);
       // Build highlighted nodes from grouped results
       final hi = <String>{};
       for (final s in results.values) {
@@ -313,6 +313,16 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                     _buildQueryChip(
                       '🛤️ Management Chain',
                       'person:Person-[:MANAGES]->team-[:ASSIGNED_TO]->project',
+                    ),
+
+                    // Multiple edge types - NEW! Show OR semantics
+                    _buildQueryChip(
+                      '🔀 Works OR Manages',
+                      'person:Person-[:WORKS_FOR|MANAGES]->team',
+                    ),
+                    _buildQueryChip(
+                      '🔀 Multi-Type Chain',
+                      'person-[:WORKS_FOR|MANAGES]->team-[:ASSIGNED_TO]->project',
                     ),
 
                     // Simple 2-hop chains
@@ -807,7 +817,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
           : query.matchPaths(pattern);
       debugPrint('Query: $pattern, StartId: $startId, Results: $results');
       lastPattern = pattern;
-      _highlightEdgeTypes = _extractEdgeTypes(pattern);
+      _highlightEdgeTypes = _extractEdgeTypes(paths);
       // Build highlighted nodes from grouped results
       final hi = <String>{};
       for (final s in results.values) {
@@ -848,11 +858,14 @@ class _GraphVisualizationState extends State<GraphVisualization> {
       final rows = startId != null
           ? query.matchRows(pattern, startId: startId)
           : query.matchRows(pattern);
+      final paths = startId != null
+          ? query.matchPaths(pattern, startId: startId)
+          : query.matchPaths(pattern);
       debugPrint(
         'Rows Query: $pattern, StartId: $startId, Rows: ${rows.length}',
       );
       lastPattern = pattern;
-      _highlightEdgeTypes = _extractEdgeTypes(pattern);
+      _highlightEdgeTypes = _extractEdgeTypes(paths);
       // Build highlighted nodes from row results
       final hi = <String>{};
       for (final r in rows) {
@@ -1032,12 +1045,15 @@ class _GraphVisualizationState extends State<GraphVisualization> {
 
   String _escapeSingleQuotes(String s) => s.replaceAll("'", r"\'");
 
-  Set<String> _extractEdgeTypes(String pattern) {
+  Set<String> _extractEdgeTypes(List<petit.PathMatch>? paths) {
     final types = <String>{};
-    final re = RegExp(r'\[\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\]');
-    for (final m in re.allMatches(pattern)) {
-      final t = m.group(1);
-      if (t != null && t.isNotEmpty) types.add(t);
+    if (paths == null) return types;
+
+    // Extract actual edge types from query results
+    for (final path in paths) {
+      for (final edge in path.edges) {
+        types.add(edge.type);
+      }
     }
     return types;
   }
