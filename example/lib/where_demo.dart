@@ -1,23 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:graph_kit/graph_kit.dart';
 
-void main() {
-  runApp(const WhereClauseDemoApp());
-}
-
 class WhereClauseDemoApp extends StatelessWidget {
   const WhereClauseDemoApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'WHERE Clause Demo',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: const WhereClauseDemo(),
-    );
+    return const WhereClauseDemo();
   }
 }
 
