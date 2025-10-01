@@ -8,6 +8,7 @@ GraphKit implements a powerful subset of the Cypher query language for graph pat
 - [Basic Pattern Matching](#basic-pattern-matching)
 - [Node Types and Labels](#node-types-and-labels)
 - [Relationships and Edges](#relationships-and-edges)
+- [Multiple Edge Types](#multiple-edge-types)
 - [Variable-Length Paths](#variable-length-paths)
 - [WHERE Clause Filtering](#where-clause-filtering)
 - [Logical Operators](#logical-operators)
@@ -90,6 +91,48 @@ MATCH project:Project<-[:MANAGES]-person:Person
 
 # Mixed directions
 MATCH person:Person-[:WORKS_FOR]->team:Team-[:WORKS_ON]->project:Project
+```
+
+## Multiple Edge Types
+
+Match relationships that can be any of several types using the `|` (OR) operator:
+
+```cypher
+# Match people who WORKS_FOR or VOLUNTEERS_AT an organization
+MATCH person:Person-[:WORKS_FOR|VOLUNTEERS_AT]->org:Organization
+
+# Match any of three relationship types
+MATCH user:User-[:FOLLOWS|LIKES|SUBSCRIBES_TO]->content:Content
+
+# Works with backwards relationships too
+MATCH project:Project<-[:ASSIGNED_TO|COLLABORATES_WITH]-team:Team
+
+# Combine with other features
+MATCH person:Person-[:WORKS_FOR|MANAGES|INTERN_AT]->team:Team
+WHERE person.age > 25
+```
+
+### OR Semantics
+
+Multiple edge types use **OR logic** - a match is found if **ANY** of the specified types exist:
+
+```cypher
+# This matches if there's a WORKS_FOR edge OR a VOLUNTEERS_AT edge
+person-[:WORKS_FOR|VOLUNTEERS_AT]->org
+
+# Equivalent to SQL's: WHERE edge_type IN ('WORKS_FOR', 'VOLUNTEERS_AT')
+```
+
+### Combining with Variable-Length Paths
+
+Multiple edge types work seamlessly with variable-length paths:
+
+```cypher
+# Find all nodes reachable within 2 hops via WORKS_FOR or MANAGES
+MATCH person:Person-[:WORKS_FOR|MANAGES*1..2]->target
+
+# Follow collaboration paths of mixed types
+MATCH team:Team-[:COLLABORATES_WITH|PARTNERS_WITH*]->connected:Team
 ```
 
 ## Variable-Length Paths

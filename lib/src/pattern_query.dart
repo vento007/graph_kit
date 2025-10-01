@@ -95,25 +95,23 @@ class PatternQuery<N extends Node> {
 
       final isForward = directions[i];
       final edgePart = isForward ? part : parts[i + 1];
-      final edgeType = _edgeTypeFrom(edgePart);
-      if (edgeType == null) {
+      final edgeTypes = _edgeTypeFrom(edgePart);
+      if (edgeTypes == null || edgeTypes.isEmpty) {
         return const <Map<String, String>>[];
       }
-      final edgeTypeTrimmed = edgeType.trim();
-      if (edgeTypeTrimmed.isEmpty) return const <Map<String, String>>[];
 
       // Check if this is a variable-length relationship
       final variableLengthSpec = _extractVariableLengthSpec(edgePart);
       if (variableLengthSpec != null) {
         // Handle variable-length relationship using enumeratePaths
         final vlResults = _executeVariableLengthSegment(
-          currentRows, aliasHere, nextAlias, edgeTypeTrimmed, variableLengthSpec, isForward
+          currentRows, aliasHere, nextAlias, edgeTypes, variableLengthSpec, isForward
         );
         currentRows = vlResults;
       } else {
         // Handle single-hop relationship (existing logic)
         currentRows = _executeSingleHopSegment(
-          currentRows, aliasHere, nextAlias, edgeTypeTrimmed, isForward
+          currentRows, aliasHere, nextAlias, edgeTypes, isForward
         );
       }
 
@@ -129,11 +127,12 @@ class PatternQuery<N extends Node> {
   }
 
   /// Executes a single-hop relationship segment
+  /// Supports multiple edge types with OR semantics (matches ANY of the types)
   List<Map<String, String>> _executeSingleHopSegment(
     List<Map<String, String>> currentRows,
     String aliasHere,
     String nextAlias,
-    String edgeType,
+    List<String> edgeTypes,
     bool isForward,
   ) {
     final nextRows = <Map<String, String>>[];
@@ -142,10 +141,17 @@ class PatternQuery<N extends Node> {
     for (final row in currentRows) {
       final srcId = row[aliasHere];
       if (srcId == null) continue;
-      final neighbors = isForward
-          ? graph.outNeighbors(srcId, edgeType)
-          : graph.inNeighbors(srcId, edgeType);
-      for (final nb in neighbors) {
+
+      // Collect neighbors matching ANY of the edge types (OR logic)
+      final allNeighbors = <String>{};
+      for (final edgeType in edgeTypes) {
+        final neighbors = isForward
+            ? graph.outNeighbors(srcId, edgeType)
+            : graph.inNeighbors(srcId, edgeType);
+        allNeighbors.addAll(neighbors);
+      }
+
+      for (final nb in allNeighbors) {
         final newRow = Map<String, String>.from(row);
         newRow[nextAlias] = nb;
         final keys = newRow.keys.toList()..sort();
@@ -160,11 +166,12 @@ class PatternQuery<N extends Node> {
   }
 
   /// Executes a variable-length relationship segment using enumeratePaths
+  /// Supports multiple edge types with OR semantics (matches ANY of the types)
   List<Map<String, String>> _executeVariableLengthSegment(
     List<Map<String, String>> currentRows,
     String aliasHere,
     String nextAlias,
-    String edgeType,
+    List<String> edgeTypes,
     VariableLengthSpec vlSpec,
     bool isForward,
   ) {
@@ -175,12 +182,16 @@ class PatternQuery<N extends Node> {
       final srcId = row[aliasHere];
       if (srcId == null) continue;
 
-      // Find all possible destinations within hop limits
-      final destinations = _findVariableLengthDestinations(
-        srcId, edgeType, vlSpec, isForward
-      );
+      // Find all possible destinations within hop limits, matching ANY edge type
+      final allDestinations = <String>{};
+      for (final edgeType in edgeTypes) {
+        final destinations = _findVariableLengthDestinations(
+          srcId, edgeType, vlSpec, isForward
+        );
+        allDestinations.addAll(destinations);
+      }
 
-      for (final destId in destinations) {
+      for (final destId in allDestinations) {
         final newRow = Map<String, String>.from(row);
         newRow[nextAlias] = destId;
         final keys = newRow.keys.toList()..sort();
@@ -431,7 +442,8 @@ class PatternQuery<N extends Node> {
   }
 
   // Copied helper methods from original parser
-  String? _edgeTypeFrom(String segment) {
+  /// Extracts edge types from a segment. Returns list of types for OR syntax [:TYPE1|TYPE2]
+  List<String>? _edgeTypeFrom(String segment) {
     for (int i = 0; i < segment.length; i++) {
       if (segment[i] == '[') {
         int j = i + 1;
@@ -461,12 +473,14 @@ class PatternQuery<N extends Node> {
           } else if (c == ']') {
             depth--;
             if (depth == 0) {
-              // Extract just the edge type (before *)
-              final fullContent = segment.substring(contentStart, k);
+              // Extract edge type content (before *)
+              String fullContent = segment.substring(contentStart, k);
               if (fullContent.contains('*')) {
-                return fullContent.split('*')[0];
+                fullContent = fullContent.split('*')[0];
               }
-              return fullContent;
+              // Split by | to support multiple types
+              final types = fullContent.split('|').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+              return types.isEmpty ? null : types;
             }
           }
           k++;
@@ -545,10 +559,24 @@ class PatternQuery<N extends Node> {
       if (fromVar == null || toVar == null) continue;
       if (!row.containsKey(fromVar) || !row.containsKey(toVar)) continue;
 
-      // Extract edge type from the appropriate part (backward uses toPart)
+      // Extract edge types from the appropriate part (backward uses toPart)
       final edgePart = isForward ? fromPart : toPart;
-      final edgeType = _edgeTypeFrom(edgePart)?.trim();
-      if (edgeType == null || edgeType.isEmpty) continue;
+      final edgeTypes = _edgeTypeFrom(edgePart);
+      if (edgeTypes == null || edgeTypes.isEmpty) continue;
+
+      // Determine which edge type actually exists between these nodes
+      final fromId = isForward ? row[fromVar]! : row[toVar]!;
+      final toId = isForward ? row[toVar]! : row[fromVar]!;
+
+      String? actualEdgeType;
+      for (final type in edgeTypes) {
+        if (graph.hasEdge(fromId, type, toId)) {
+          actualEdgeType = type;
+          break;
+        }
+      }
+
+      if (actualEdgeType == null) continue;
 
       // Create the edge based on direction
       if (isForward) {
@@ -556,7 +584,7 @@ class PatternQuery<N extends Node> {
           PathEdge(
             from: row[fromVar]!,
             to: row[toVar]!,
-            type: edgeType,
+            type: actualEdgeType,
             fromVariable: fromVar,
             toVariable: toVar,
           ),
@@ -566,7 +594,7 @@ class PatternQuery<N extends Node> {
           PathEdge(
             from: row[toVar]!,
             to: row[fromVar]!,
-            type: edgeType,
+            type: actualEdgeType,
             fromVariable: toVar,
             toVariable: fromVar,
           ),
@@ -596,7 +624,8 @@ class PatternQuery<N extends Node> {
       }
     } else {
       // Remove edge syntax if present in the middle or end
-      part = part.replaceAll(RegExp(r'\[\s*:\s*\w+\s*\]'), '').trim();
+      // Updated regex to handle multiple types with | separator and variable-length *
+      part = part.replaceAll(RegExp(r'\[\s*:[^\]]*\]'), '').trim();
       // Remove trailing dash that might be left after edge removal
       part = part.replaceAll(RegExp(r'-+$'), '').trim();
     }

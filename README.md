@@ -468,6 +468,7 @@ print(projectEcosystem.edges.length); // 7
 - **Forward patterns**: `"user-[:MEMBER_OF]->group"`
 - **Backward patterns**: `"resource<-[:CAN_ACCESS]-group<-[:MEMBER_OF]-user"` → `{alice, bob}`
 - **Label filtering**: `"user:User{label~Admin}"` → `{bob}`
+- **Multiple edge types**: `"person-[:WORKS_FOR|VOLUNTEERS_AT]->org"` → matches ANY of the specified relationship types
 - **Variable-length paths**: `"manager-[:MANAGES*1..3]->subordinate"` → finds direct and indirect reports
 
 ## 6. Mini-Cypher Reference
@@ -622,7 +623,7 @@ query.match('component-[:DEPENDS_ON*]->dependency')
 
 For sophisticated filtering beyond basic patterns, GraphKit supports full WHERE clause syntax with logical operators and parentheses.
 
-**[Complete Cypher Query Language Guide](CYPHER_GUIDE.md)**
+**[Complete Cypher Query Language Guide](https://github.com/vento007/graph_kit/blob/main/CYPHER_GUIDE.md)**
 
 The comprehensive guide covers:
 - Complex logical expressions with parentheses: `(A AND B) OR (C AND D)`
@@ -653,7 +654,7 @@ The demo includes sample queries, real-time query execution, and a comprehensive
 |-----------------------|-------------|---------------------|
 | Mixed directions      | Yes         | No                  |
 | Variable length paths | Yes         | Yes                 |
-| Multiple edge types   | `[:TYPE1\|TYPE2]` | No                  |
+| Multiple edge types   | `[:TYPE1\|TYPE2]` | Yes                 |
 | Multiple patterns     | `pattern1, pattern2` | No                  |
 | Optional matches      | Yes         | Via `matchMany`     |
 | WHERE clauses         | Yes         | Yes                 |
