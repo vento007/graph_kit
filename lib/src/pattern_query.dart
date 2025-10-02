@@ -288,22 +288,57 @@ class PatternQuery<N extends Node> {
   }
 
   List<PathMatch> matchPaths(String pattern, {String? startId}) {
-    // matchPaths doesn't support RETURN filtering yet - strip it for now
+    // Check if pattern has RETURN clause
+    final hasReturn = RegExp(r'\s+RETURN\s+', caseSensitive: false).hasMatch(pattern);
+    
+    if (!hasReturn) {
+      // No RETURN clause - original behavior
+      final rows = matchRows(pattern, startId: startId);
+      final pathMatches = <PathMatch>[];
+      
+      for (final row in rows) {
+        // Extract only string node IDs for PathMatch.nodes
+        final nodeIds = <String, String>{};
+        for (final entry in row.entries) {
+          if (entry.value is String) {
+            nodeIds[entry.key] = entry.value as String;
+          }
+        }
+        final edges = _buildEdgesForRow(pattern, nodeIds);
+        pathMatches.add(PathMatch(nodes: nodeIds, edges: edges));
+      }
+      return pathMatches;
+    }
+    
+    // Has RETURN clause - need both filtered and unfiltered results
+    final filteredRows = matchRows(pattern, startId: startId);
     final patternWithoutReturn = pattern.replaceAll(RegExp(r'\s+RETURN\s+.+$', caseSensitive: false), '');
-    final rows = matchRows(patternWithoutReturn, startId: startId);
+    final unfilteredRows = matchRows(patternWithoutReturn, startId: startId);
+    
     final pathMatches = <PathMatch>[];
     
-    for (final row in rows) {
-      // Extract only string node IDs for PathMatch.nodes
+    // Both result sets should have the same length (same matches, different projections)
+    for (var i = 0; i < filteredRows.length && i < unfilteredRows.length; i++) {
+      // Use filtered row for PathMatch.nodes (respects RETURN variable filtering)
       final nodeIds = <String, String>{};
-      for (final entry in row.entries) {
+      for (final entry in filteredRows[i].entries) {
         if (entry.value is String) {
           nodeIds[entry.key] = entry.value as String;
         }
       }
-      final edges = _buildEdgesForRow(patternWithoutReturn, nodeIds);
+      
+      // Use unfiltered row for building edges (needs all variables)
+      final unfilteredIds = <String, String>{};
+      for (final entry in unfilteredRows[i].entries) {
+        if (entry.value is String) {
+          unfilteredIds[entry.key] = entry.value as String;
+        }
+      }
+      
+      final edges = _buildEdgesForRow(patternWithoutReturn, unfilteredIds);
       pathMatches.add(PathMatch(nodes: nodeIds, edges: edges));
     }
+    
     return pathMatches;
   }
 
