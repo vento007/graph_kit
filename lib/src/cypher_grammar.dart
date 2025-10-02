@@ -3,7 +3,7 @@ import 'package:petitparser/petitparser.dart';
 /// Grammar definition for Cypher-like patterns
 class CypherPatternGrammar extends GrammarDefinition {
   @override
-  Parser start() => (string('MATCH') & whitespace().plus()).optional() & ref0(patternWithWhere).end();
+  Parser start() => ((string('MATCH') & whitespace().plus()).optional() & ref0(patternWithWhere) & ref0(returnClause).optional()).end();
 
   Parser patternWithWhere() => ref0(pattern) & (whitespace().plus() & ref0(whereClause)).optional();
 
@@ -79,6 +79,13 @@ class CypherPatternGrammar extends GrammarDefinition {
   Parser stringLiteral() => char('"') & (char('"').neg()).star() & char('"');
 
   Parser numberLiteral() => digit().plus();
+
+  // RETURN clause support
+  Parser returnClause() => whitespace().plus() & string('RETURN') & whitespace().plus() & ref0(returnItems);
+
+  Parser returnItems() => ref0(returnItem) & (whitespace().star() & char(',') & whitespace().star() & ref0(returnItem)).star();
+
+  Parser returnItem() => ref0(variable);  // Phase 1: just variable names
 
   // Helper for optional whitespace
   Parser optionalWhitespace() => whitespace().star();
