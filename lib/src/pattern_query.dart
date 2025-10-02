@@ -18,10 +18,16 @@ class PatternQuery<N extends Node> {
 
   /// Core implementation of pattern matching using parse tree
   /// Returns List<Map<String, dynamic>> to support both node IDs and property values
+  /// 
+  /// Throws [FormatException] if the pattern cannot be parsed
   List<Map<String, dynamic>> matchRows(String pattern, {String? startId}) {
     final result = _parser.parse(pattern);
     if (result is Failure) {
-      return const <Map<String, dynamic>>[];
+      throw FormatException(
+        'Failed to parse pattern at position ${result.position}: ${result.message}',
+        pattern,
+        result.position,
+      );
     }
 
     // Extract pattern, WHERE clause, and RETURN clause from parse tree
@@ -282,8 +288,11 @@ class PatternQuery<N extends Node> {
   }
 
   List<PathMatch> matchPaths(String pattern, {String? startId}) {
-    final rows = matchRows(pattern, startId: startId);
+    // matchPaths doesn't support RETURN filtering yet - strip it for now
+    final patternWithoutReturn = pattern.replaceAll(RegExp(r'\s+RETURN\s+.+$', caseSensitive: false), '');
+    final rows = matchRows(patternWithoutReturn, startId: startId);
     final pathMatches = <PathMatch>[];
+    
     for (final row in rows) {
       // Extract only string node IDs for PathMatch.nodes
       final nodeIds = <String, String>{};
@@ -292,7 +301,7 @@ class PatternQuery<N extends Node> {
           nodeIds[entry.key] = entry.value as String;
         }
       }
-      final edges = _buildEdgesForRow(pattern, nodeIds);
+      final edges = _buildEdgesForRow(patternWithoutReturn, nodeIds);
       pathMatches.add(PathMatch(nodes: nodeIds, edges: edges));
     }
     return pathMatches;
@@ -855,12 +864,42 @@ class PatternQuery<N extends Node> {
   }
   
   /// Apply RETURN clause: filter variables and resolve properties
+  /// 
+  /// Throws [ArgumentError] if:
+  /// - A requested variable doesn't exist in the pattern
+  /// - Duplicate aliases are specified
   List<Map<String, dynamic>> _applyReturnClause(
     List<Map<String, String>> rows,
     List<ReturnItem> returnItems,
   ) {
     if (returnItems.isEmpty) {
       return rows.map((row) => row.cast<String, dynamic>()).toList();
+    }
+    
+    // Validate: check for duplicate AS aliases (explicit duplicates only)
+    final aliasNames = <String>{};
+    for (final item in returnItems) {
+      if (item.alias != null) {
+        if (!aliasNames.add(item.alias!)) {
+          throw ArgumentError('Duplicate alias in RETURN clause: ${item.alias}');
+        }
+      }
+    }
+    
+    // Validate: check that all requested variables exist (use first row as sample)
+    if (rows.isNotEmpty) {
+      final sampleRow = rows.first;
+      final availableVars = sampleRow.keys.toSet();
+      
+      for (final item in returnItems) {
+        final varName = item.sourceVariable;
+        if (!availableVars.contains(varName)) {
+          throw ArgumentError(
+            'Variable "$varName" in RETURN clause does not exist in pattern. '
+            'Available variables: ${availableVars.join(", ")}'
+          );
+        }
+      }
     }
     
     final results = <Map<String, dynamic>>[];
