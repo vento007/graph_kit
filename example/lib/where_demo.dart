@@ -21,7 +21,7 @@ class _WhereClauseDemoState extends State<WhereClauseDemo> {
   late Graph<Node> graph;
   late PatternQuery<Node> query;
   final TextEditingController _queryController = TextEditingController();
-  List<Map<String, String>> _results = [];
+  List<Map<String, dynamic>> _results = [];
   String? _error;
   bool _isLoading = false;
 

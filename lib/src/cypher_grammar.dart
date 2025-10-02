@@ -74,18 +74,33 @@ class CypherPatternGrammar extends GrammarDefinition {
 
   Parser comparisonOperator() => string('>=') | string('<=') | string('!=') | char('>') | char('<') | char('=');
 
-  Parser value() => ref0(stringLiteral) | ref0(numberLiteral);
+  Parser value() => ref0(stringLiteral) | ref0(numberLiteral) | ref0(booleanLiteral);
 
   Parser stringLiteral() => char('"') & (char('"').neg()).star() & char('"');
 
   Parser numberLiteral() => digit().plus();
+
+  Parser booleanLiteral() => string('true') | string('false');
 
   // RETURN clause support
   Parser returnClause() => whitespace().plus() & string('RETURN') & whitespace().plus() & ref0(returnItems);
 
   Parser returnItems() => ref0(returnItem) & (whitespace().star() & char(',') & whitespace().star() & ref0(returnItem)).star();
 
-  Parser returnItem() => ref0(variable);  // Phase 1: just variable names
+  // RETURN item: variable, property access, or either with AS alias
+  Parser returnItem() => (ref0(returnPropertyAccess) | ref0(variable)) & ref0(asAlias).optional();
+
+  // Property access: variable.property
+  Parser returnPropertyAccess() => ref0(variable) & char('.') & ref0(propertyName);
+  
+  Parser propertyName() => ref0(variable);
+
+  // AS aliasing: AS alias_name (case insensitive)
+  Parser asAlias() => 
+    whitespace().plus() & 
+    (string('AS') | string('as') | string('As') | string('aS')) & 
+    whitespace().plus() & 
+    ref0(variable);
 
   // Helper for optional whitespace
   Parser optionalWhitespace() => whitespace().star();

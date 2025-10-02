@@ -25,7 +25,7 @@ class _GraphVisualizationState extends State<GraphVisualization> {
   late PatternQuery query;
   final TextEditingController _queryController = TextEditingController();
   Map<String, Set<String>>? queryResults;
-  List<Map<String, String>>? queryRows;
+  List<Map<String, dynamic>>? queryRows;
   List<petit.PathMatch>? queryPaths;
   String? selectedNodeId;
   bool _showCode = true;

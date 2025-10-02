@@ -129,3 +129,48 @@ class VariableLengthSpec {
   @override
   int get hashCode => minHops.hashCode ^ maxHops.hashCode;
 }
+
+/// Represents a single item in a RETURN clause.
+class ReturnItem {
+  /// Variable name (for simple returns like "RETURN person")
+  final String? variable;
+  
+  /// Variable name for property access (for "RETURN person.name", this is "person")
+  final String? propertyVariable;
+  
+  /// Property name for property access (for "RETURN person.name", this is "name")
+  final String? propertyName;
+  
+  /// Optional alias (for "RETURN person AS p" or "RETURN person.name AS displayName")
+  final String? alias;
+  
+  const ReturnItem({
+    this.variable,
+    this.propertyVariable,
+    this.propertyName,
+    this.alias,
+  });
+  
+  /// Returns true if this is a property access (person.name)
+  bool get isProperty => propertyVariable != null && propertyName != null;
+  
+  /// Returns the column name to use in results (alias if present, otherwise default)
+  String get columnName {
+    if (alias != null) return alias!;
+    if (isProperty) return '$propertyVariable.$propertyName';
+    return variable!;
+  }
+  
+  /// Returns the source variable name (for looking up in row data)
+  String get sourceVariable => propertyVariable ?? variable!;
+  
+  @override
+  String toString() {
+    if (isProperty) {
+      return alias != null 
+        ? '$propertyVariable.$propertyName AS $alias'
+        : '$propertyVariable.$propertyName';
+    }
+    return alias != null ? '$variable AS $alias' : variable!;
+  }
+}
