@@ -469,6 +469,7 @@ print(projectEcosystem.edges.length); // 7
 - **Backward patterns**: `"resource<-[:CAN_ACCESS]-group<-[:MEMBER_OF]-user"` → `{alice, bob}`
 - **Label filtering**: `"user:User{label~Admin}"` → `{bob}`
 - **Multiple edge types**: `"person-[:WORKS_FOR|VOLUNTEERS_AT]->org"` → matches ANY of the specified relationship types
+- **Mixed directions**: `"person1-[:WORKS_FOR]->team<-[:MANAGES]-manager"` → finds common connections and shared relationships
 - **Variable-length paths**: `"manager-[:MANAGES*1..3]->subordinate"` → finds direct and indirect reports
 
 ## 6. Mini-Cypher Reference
@@ -652,7 +653,7 @@ The demo includes sample queries, real-time query execution, and a comprehensive
 
 | Feature               | Real Cypher | graph_kit           |
 |-----------------------|-------------|---------------------|
-| Mixed directions      | Yes         | No                  |
+| Mixed directions      | Yes         | Yes                 |
 | Variable length paths | Yes         | Yes                 |
 | Multiple edge types   | `[:TYPE1\|TYPE2]` | Yes                 |
 | Multiple patterns     | `pattern1, pattern2` | No                  |

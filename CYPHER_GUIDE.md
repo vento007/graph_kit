@@ -9,6 +9,7 @@ GraphKit implements a powerful subset of the Cypher query language for graph pat
 - [Node Types and Labels](#node-types-and-labels)
 - [Relationships and Edges](#relationships-and-edges)
 - [Multiple Edge Types](#multiple-edge-types)
+- [Mixed Direction Patterns](#mixed-direction-patterns)
 - [Variable-Length Paths](#variable-length-paths)
 - [WHERE Clause Filtering](#where-clause-filtering)
 - [Logical Operators](#logical-operators)
@@ -133,6 +134,83 @@ MATCH person:Person-[:WORKS_FOR|MANAGES*1..2]->target
 
 # Follow collaboration paths of mixed types
 MATCH team:Team-[:COLLABORATES_WITH|PARTNERS_WITH*]->connected:Team
+```
+
+## Mixed Direction Patterns
+
+Combine forward (`->`) and backward (`<-`) relationships in a single pattern to find common connections, hierarchies, and bidirectional patterns.
+
+### Basic Mixed Patterns
+
+```cypher
+# Find coworkers: people who work for teams managed by same manager
+MATCH person1-[:WORKS_FOR]->team<-[:MANAGES]-manager
+
+# Find people following the same person (common target)
+MATCH person1-[:FOLLOWS]->target<-[:FOLLOWS]-person2
+
+# Find people followed by the same person (common source)
+MATCH target1<-[:FOLLOWS]-person-[:FOLLOWS]->target2
+```
+
+### Real-World Use Cases
+
+**Organizational Hierarchies**
+```cypher
+# Find coworkers (people reporting to same manager)
+MATCH emp1-[:REPORTS_TO]->manager<-[:REPORTS_TO]-emp2
+
+# Find peers in sibling departments
+MATCH me-[:REPORTS_TO]->my_manager-[:REPORTS_TO]->director<-[:REPORTS_TO]-other_manager<-[:REPORTS_TO]-peer
+```
+
+**Social Networks**
+```cypher
+# Find mutual connections (friend triangles)
+MATCH alice-[:FRIENDS_WITH]->bob-[:FRIENDS_WITH]->charlie<-[:FRIENDS_WITH]-alice
+
+# Discover related research papers
+MATCH my_paper-[:CITES]->source<-[:CITES]-related_paper
+```
+
+**Supply Chain & E-commerce**
+```cypher
+# Find companies sharing suppliers
+MATCH company_a-[:BUYS_FROM]->supplier<-[:BUYS_FROM]-company_b
+
+# Product recommendations
+MATCH user-[:PURCHASED]->product<-[:PURCHASED]-other_user-[:PURCHASED]->recommended
+```
+
+### Complex Chains
+
+Mixed directions work in patterns of any length:
+
+```cypher
+# 5-hop pattern with multiple direction changes
+MATCH a->b->c<-d<-e->f
+
+# Citation network analysis
+MATCH p1-[:CITES]->base<-[:CITES]-p2<-[:CITES]-review-[:CITES]->p3
+```
+
+### Combining with Other Features
+
+Mixed directions integrate seamlessly with all other features:
+
+```cypher
+# With multiple edge types
+MATCH p1-[:WORKS_FOR|MANAGES]->team<-[:VOLUNTEERS_FOR]-p2
+
+# With variable-length paths
+MATCH start-[:CONNECTS*1..2]->hub<-[:CONNECTS]-end
+
+# With WHERE clauses
+MATCH emp1-[:WORKS_FOR]->team<-[:WORKS_FOR]-emp2
+WHERE emp1.age > 30 AND emp2.age > 30
+
+# With label filtering
+MATCH person1:Person{label~Admin}->team<-[:MANAGES]-manager
 ```
 
 ## Variable-Length Paths
