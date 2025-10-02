@@ -31,7 +31,7 @@ class CypherPatternGrammar extends GrammarDefinition {
 
   Parser backwardArrow() => string('<-') & ref0(edgeType).optional() & char('-');
 
-  Parser edgeType() => char('[') & char(':') & ref0(edgeTypeList) & ref0(variableLengthModifier).optional() & char(']');
+  Parser edgeType() => char('[') & whitespace().star() & char(':') & whitespace().star() & ref0(edgeTypeList) & whitespace().star() & ref0(variableLengthModifier).optional() & whitespace().star() & char(']');
 
   Parser edgeTypeList() => ref0(variable) & (char('|') & ref0(variable)).star();
 
