@@ -1,3 +1,8 @@
+## 0.7.3
+
+### Fixed
+- **Parser whitespace handling**: Added support for optional whitespace within edge type brackets (e.g., `[ : TYPE ]`, `[ :TYPE ]`)
+
 ## 0.7.2
 
 ### Documentation
