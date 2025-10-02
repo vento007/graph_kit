@@ -234,6 +234,20 @@ class _GraphVisualizationState extends State<GraphVisualization> {
                       'person-[:WORKS_FOR|MANAGES]->team-[:ASSIGNED_TO]->project',
                     ),
 
+                    // Mixed direction patterns - NEW! Find common connections
+                    _buildQueryChip(
+                      '🔄 Coworkers',
+                      'person1-[:WORKS_FOR]->team<-[:MANAGES]-manager',
+                    ),
+                    _buildQueryChip(
+                      '🔄 Common Team',
+                      'person1-[:WORKS_FOR]->team<-[:WORKS_FOR]-person2',
+                    ),
+                    _buildQueryChip(
+                      '🔄 Team & Project',
+                      'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project<-[:LEADS]-leader',
+                    ),
+
                     // Simple 2-hop chains
                     _buildQueryChip(
                       'Who Works Where',

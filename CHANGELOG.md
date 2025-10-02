@@ -1,3 +1,10 @@
+## 0.7.2
+
+### Documentation
+- **Mixed direction patterns**: Documented support for combining forward/backward relationships (e.g., `person1->team<-manager`)
+- Added comprehensive test suite (24 tests) and examples to CYPHER_GUIDE.md
+- Added demo queries to Flutter example app
+
 ## 0.7.1
 
 ### Added
