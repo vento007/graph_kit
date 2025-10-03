@@ -1,3 +1,12 @@
+## 0.7.4
+
+### Added
+- **RETURN clause support**: Project specific variables and properties from query results
+  - Variable projection: `RETURN person, team`
+  - Property access: `RETURN person.name, team.size`
+  - AS aliasing: `RETURN person.name AS displayName, person.age AS years`
+  - Works with WHERE filtering, variable-length paths, multiple edge types, and mixed directions
+
 ## 0.7.3
 
 ### Fixed

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'main_demo.dart';
 import 'algorithms_demo.dart';
 import 'where_demo.dart';
+import 'return_demo.dart';
 
 void main() {
   runApp(const GraphKitDemoLauncher());
@@ -114,6 +115,22 @@ class DemoMenuPage extends StatelessWidget {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => const WhereClauseDemoApp(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  _buildDemoCard(
+                    context,
+                    title: 'RETURN Clause Projection',
+                    description:
+                        'Project specific variables and properties with aliasing - clean employee directory demo',
+                    icon: Icons.table_rows,
+                    color: Colors.orange,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const ReturnClauseDemoApp(),
                         ),
                       );
                     },

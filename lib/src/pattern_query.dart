@@ -17,29 +17,44 @@ class PatternQuery<N extends Node> {
   }
 
   /// Core implementation of pattern matching using parse tree
-  List<Map<String, String>> matchRows(String pattern, {String? startId}) {
+  /// Returns `List<Map<String, dynamic>>` to support both node IDs and property values
+  /// 
+  /// Throws [FormatException] if the pattern cannot be parsed
+  List<Map<String, dynamic>> matchRows(String pattern, {String? startId}) {
     final result = _parser.parse(pattern);
     if (result is Failure) {
-      return const <Map<String, String>>[];
+      throw FormatException(
+        'Failed to parse pattern at position ${result.position}: ${result.message}',
+        pattern,
+        result.position,
+      );
     }
 
-    // Extract pattern and WHERE clause from parse tree
+    // Extract pattern, WHERE clause, and RETURN clause from parse tree
     final parts = <String>[];
     final directions = <bool>[];
     dynamic whereClause;
+    List<ReturnItem>? returnItems;
 
-    // Parse tree structure: [optional_MATCH, [pattern, [whitespace, WHERE_clause]?]]
-    // or without MATCH: [[pattern, [whitespace, WHERE_clause]?]]
+    // Parse tree structure: [optional_MATCH, patternWithWhere, optional_RETURN]
+    // or without MATCH: [null, patternWithWhere, optional_RETURN]
     if (result.value is List) {
       dynamic patternWithWhere;
+      dynamic returnClause;
 
       // Check if MATCH is present
       if (result.value.length >= 2 && result.value[0] != null) {
-        // With MATCH: [MATCH_part, patternWithWhere]
+        // With MATCH: [MATCH_part, patternWithWhere, optional_RETURN]
         patternWithWhere = result.value[1];
+        if (result.value.length >= 3) {
+          returnClause = result.value[2];
+        }
       } else {
-        // Without MATCH: [null, patternWithWhere] or direct patternWithWhere
+        // Without MATCH: [null, patternWithWhere, optional_RETURN]
         patternWithWhere = result.value.length > 1 ? result.value[1] : result.value[0];
+        if (result.value.length >= 3) {
+          returnClause = result.value[2];
+        }
       }
 
       if (patternWithWhere is List && patternWithWhere.isNotEmpty) {
@@ -54,11 +69,16 @@ class PatternQuery<N extends Node> {
           }
         }
       }
+
+      // Extract RETURN clause if present
+      if (returnClause != null) {
+        returnItems = _extractReturnItems(returnClause);
+      }
     }
 
     // Debug removed - working correctly
 
-    if (parts.isEmpty) return const <Map<String, String>>[];
+    if (parts.isEmpty) return const <Map<String, dynamic>>[];
 
     // Helper to extract alias name from a part (copied from original)
     String aliasOf(String part) {
@@ -74,7 +94,7 @@ class PatternQuery<N extends Node> {
     List<Map<String, String>> currentRows = <Map<String, String>>[];
     final firstAlias = aliasOf(parts.first);
     if (firstAlias.isEmpty) {
-      return const <Map<String, String>>[];
+      return const <Map<String, dynamic>>[];
     }
 
     if (startId != null) {
@@ -97,7 +117,7 @@ class PatternQuery<N extends Node> {
       final edgePart = isForward ? part : parts[i + 1];
       final edgeTypes = _edgeTypeFrom(edgePart);
       if (edgeTypes == null || edgeTypes.isEmpty) {
-        return const <Map<String, String>>[];
+        return const <Map<String, dynamic>>[];
       }
 
       // Check if this is a variable-length relationship
@@ -123,7 +143,13 @@ class PatternQuery<N extends Node> {
       currentRows = _applyWhereClause(currentRows, whereClause);
     }
 
-    return currentRows;
+    // Apply RETURN clause if present (filtering and property resolution)
+    if (returnItems != null) {
+      return _applyReturnClause(currentRows, returnItems);
+    }
+
+    // Backward compatibility: no RETURN clause returns all variables
+    return currentRows.map((row) => row.cast<String, dynamic>()).toList();
   }
 
   /// Executes a single-hop relationship segment
@@ -262,12 +288,57 @@ class PatternQuery<N extends Node> {
   }
 
   List<PathMatch> matchPaths(String pattern, {String? startId}) {
-    final rows = matchRows(pattern, startId: startId);
-    final pathMatches = <PathMatch>[];
-    for (final row in rows) {
-      final edges = _buildEdgesForRow(pattern, row);
-      pathMatches.add(PathMatch(nodes: row, edges: edges));
+    // Check if pattern has RETURN clause
+    final hasReturn = RegExp(r'\s+RETURN\s+', caseSensitive: false).hasMatch(pattern);
+    
+    if (!hasReturn) {
+      // No RETURN clause - original behavior
+      final rows = matchRows(pattern, startId: startId);
+      final pathMatches = <PathMatch>[];
+      
+      for (final row in rows) {
+        // Extract only string node IDs for PathMatch.nodes
+        final nodeIds = <String, String>{};
+        for (final entry in row.entries) {
+          if (entry.value is String) {
+            nodeIds[entry.key] = entry.value as String;
+          }
+        }
+        final edges = _buildEdgesForRow(pattern, nodeIds);
+        pathMatches.add(PathMatch(nodes: nodeIds, edges: edges));
+      }
+      return pathMatches;
     }
+    
+    // Has RETURN clause - need both filtered and unfiltered results
+    final filteredRows = matchRows(pattern, startId: startId);
+    final patternWithoutReturn = pattern.replaceAll(RegExp(r'\s+RETURN\s+.+$', caseSensitive: false), '');
+    final unfilteredRows = matchRows(patternWithoutReturn, startId: startId);
+    
+    final pathMatches = <PathMatch>[];
+    
+    // Both result sets should have the same length (same matches, different projections)
+    for (var i = 0; i < filteredRows.length && i < unfilteredRows.length; i++) {
+      // Use filtered row for PathMatch.nodes (respects RETURN variable filtering)
+      final nodeIds = <String, String>{};
+      for (final entry in filteredRows[i].entries) {
+        if (entry.value is String) {
+          nodeIds[entry.key] = entry.value as String;
+        }
+      }
+      
+      // Use unfiltered row for building edges (needs all variables)
+      final unfilteredIds = <String, String>{};
+      for (final entry in unfilteredRows[i].entries) {
+        if (entry.value is String) {
+          unfilteredIds[entry.key] = entry.value as String;
+        }
+      }
+      
+      final edges = _buildEdgesForRow(patternWithoutReturn, unfilteredIds);
+      pathMatches.add(PathMatch(nodes: nodeIds, edges: edges));
+    }
+    
     return pathMatches;
   }
 
@@ -715,11 +786,11 @@ class PatternQuery<N extends Node> {
   }
 
   /// Execute multiple patterns and concatenate row results (deduplicated).
-  List<Map<String, String>> matchRowsMany(
+  List<Map<String, dynamic>> matchRowsMany(
     List<String> patterns, {
     String? startId,
   }) {
-    final out = <Map<String, String>>[];
+    final out = <Map<String, dynamic>>[];
     final seen = <String>{};
     for (final p in patterns) {
       final rows = matchRows(p, startId: startId);
@@ -757,6 +828,144 @@ class PatternQuery<N extends Node> {
       }
     }
     return out;
+  }
+
+  /// Extract RETURN items from parse tree
+  List<ReturnItem> _extractReturnItems(dynamic returnClause) {
+    final items = <ReturnItem>[];
+    
+    if (returnClause is! List || returnClause.length < 4) return items;
+    
+    // returnClause structure: [whitespace, 'RETURN', whitespace, returnItems]
+    final returnItemsSection = returnClause[3];
+    if (returnItemsSection is! List) return items;
+    
+    // returnItemsSection: [first_item, [[whitespace, comma, whitespace, item], ...]]
+    if (returnItemsSection.isEmpty) return items;
+    
+    // Parse first item
+    final firstItem = _parseReturnItem(returnItemsSection[0]);
+    if (firstItem != null) items.add(firstItem);
+    
+    // Parse remaining items (if any)
+    if (returnItemsSection.length > 1 && returnItemsSection[1] is List) {
+      final moreItems = returnItemsSection[1] as List;
+      for (final itemGroup in moreItems) {
+        if (itemGroup is List && itemGroup.length >= 4) {
+          // itemGroup: [whitespace, comma, whitespace, item]
+          final item = _parseReturnItem(itemGroup[3]);
+          if (item != null) items.add(item);
+        }
+      }
+    }
+    
+    return items;
+  }
+  
+  /// Parse a single return item from parse tree
+  ReturnItem? _parseReturnItem(dynamic itemTree) {
+    if (itemTree is! List || itemTree.isEmpty) return null;
+    
+    // itemTree: [(propertyAccess | variable), optional_AS_alias]
+    final valueSection = itemTree[0];
+    final aliasSection = itemTree.length > 1 ? itemTree[1] : null;
+    
+    String? alias;
+    if (aliasSection is List && aliasSection.isNotEmpty) {
+      // aliasSection: [whitespace, 'AS', whitespace, variable]
+      if (aliasSection.length >= 4) {
+        alias = _flattenToString(aliasSection[3]);
+      }
+    }
+    
+    // Check if it's a property access (variable.property)
+    final valueStr = _flattenToString(valueSection);
+    if (valueStr.contains('.')) {
+      final parts = valueStr.split('.');
+      if (parts.length == 2) {
+        return ReturnItem(
+          propertyVariable: parts[0].trim(),
+          propertyName: parts[1].trim(),
+          alias: alias,
+        );
+      }
+    }
+    
+    // Simple variable
+    return ReturnItem(
+      variable: valueStr.trim(),
+      alias: alias,
+    );
+  }
+  
+  /// Apply RETURN clause: filter variables and resolve properties
+  /// 
+  /// Throws [ArgumentError] if:
+  /// - A requested variable doesn't exist in the pattern
+  /// - Duplicate aliases are specified
+  List<Map<String, dynamic>> _applyReturnClause(
+    List<Map<String, String>> rows,
+    List<ReturnItem> returnItems,
+  ) {
+    if (returnItems.isEmpty) {
+      return rows.map((row) => row.cast<String, dynamic>()).toList();
+    }
+    
+    // Validate: check for duplicate AS aliases (explicit duplicates only)
+    final aliasNames = <String>{};
+    for (final item in returnItems) {
+      if (item.alias != null) {
+        if (!aliasNames.add(item.alias!)) {
+          throw ArgumentError('Duplicate alias in RETURN clause: ${item.alias}');
+        }
+      }
+    }
+    
+    // Validate: check that all requested variables exist (use first row as sample)
+    if (rows.isNotEmpty) {
+      final sampleRow = rows.first;
+      final availableVars = sampleRow.keys.toSet();
+      
+      for (final item in returnItems) {
+        final varName = item.sourceVariable;
+        if (!availableVars.contains(varName)) {
+          throw ArgumentError(
+            'Variable "$varName" in RETURN clause does not exist in pattern. '
+            'Available variables: ${availableVars.join(", ")}'
+          );
+        }
+      }
+    }
+    
+    final results = <Map<String, dynamic>>[];
+    
+    for (final row in rows) {
+      final resultRow = <String, dynamic>{};
+      
+      for (final item in returnItems) {
+        final columnName = item.columnName;
+        
+        if (item.isProperty) {
+          // Property access: person.name
+          final nodeId = row[item.sourceVariable];
+          if (nodeId != null) {
+            final node = graph.nodesById[nodeId];
+            final value = node?.properties?[item.propertyName];
+            resultRow[columnName] = value; // Can be null if property doesn't exist
+          } else {
+            resultRow[columnName] = null; // Variable not in row
+          }
+        } else {
+          // Simple variable: person
+          final nodeId = row[item.variable];
+          resultRow[columnName] = nodeId; // Can be null if variable not in row
+        }
+      }
+      
+      results.add(resultRow);
+    }
+    
+    return results;
   }
 
   /// Apply WHERE clause filtering to rows
@@ -889,6 +1098,10 @@ class PatternQuery<N extends Node> {
       return trimmed.substring(1, trimmed.length - 1);
     }
 
+    // Boolean
+    if (trimmed == 'true') return true;
+    if (trimmed == 'false') return false;
+
     // Number
     final numValue = int.tryParse(trimmed);
     if (numValue != null) return numValue;
@@ -901,7 +1114,16 @@ class PatternQuery<N extends Node> {
 
   bool _compareValues(dynamic propValue, String operator, dynamic comparisonValue) {
     try {
-      // Convert both values to the same type for comparison
+      // Boolean comparison
+      if (propValue is bool && comparisonValue is bool) {
+        switch (operator) {
+          case '=': return propValue == comparisonValue;
+          case '!=': return propValue != comparisonValue;
+          default: return false; // Other operators not supported for booleans
+        }
+      }
+      
+      // Numeric comparison
       if (propValue is num && comparisonValue is num) {
         switch (operator) {
           case '>': return propValue > comparisonValue;
@@ -911,21 +1133,20 @@ class PatternQuery<N extends Node> {
           case '=': return propValue == comparisonValue;
           case '!=': return propValue != comparisonValue;
         }
-      } else {
-        // String comparison
-        final propStr = propValue.toString();
-        final compStr = comparisonValue.toString();
+      }
+      
+      // String comparison
+      final propStr = propValue.toString();
+      final compStr = comparisonValue.toString();
 
-        switch (operator) {
-          case '=': return propStr == compStr;
-          case '!=': return propStr != compStr;
-          default: return false; // Other operators not supported for strings
-        }
+      switch (operator) {
+        case '=': return propStr == compStr;
+        case '!=': return propStr != compStr;
+        default: return false; // Other operators not supported for strings
       }
     } catch (e) {
       return false;
     }
-    return false;
   }
 
   bool _containsString(dynamic expr, String target) {

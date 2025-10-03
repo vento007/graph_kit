@@ -3,7 +3,7 @@ import 'package:petitparser/petitparser.dart';
 /// Grammar definition for Cypher-like patterns
 class CypherPatternGrammar extends GrammarDefinition {
   @override
-  Parser start() => (string('MATCH') & whitespace().plus()).optional() & ref0(patternWithWhere).end();
+  Parser start() => ((string('MATCH') & whitespace().plus()).optional() & ref0(patternWithWhere) & ref0(returnClause).optional()).end().trim();
 
   Parser patternWithWhere() => ref0(pattern) & (whitespace().plus() & ref0(whereClause)).optional();
 
@@ -29,7 +29,7 @@ class CypherPatternGrammar extends GrammarDefinition {
 
   Parser forwardArrow() => (string('->') | (char('-') & ref0(edgeType) & string('->')));
 
-  Parser backwardArrow() => string('<-') & ref0(edgeType).optional() & char('-');
+  Parser backwardArrow() => ((string('<-') & ref0(edgeType) & char('-')) | string('<-'));
 
   Parser edgeType() => char('[') & whitespace().star() & char(':') & whitespace().star() & ref0(edgeTypeList) & whitespace().star() & ref0(variableLengthModifier).optional() & whitespace().star() & char(']');
 
@@ -74,11 +74,33 @@ class CypherPatternGrammar extends GrammarDefinition {
 
   Parser comparisonOperator() => string('>=') | string('<=') | string('!=') | char('>') | char('<') | char('=');
 
-  Parser value() => ref0(stringLiteral) | ref0(numberLiteral);
+  Parser value() => ref0(stringLiteral) | ref0(numberLiteral) | ref0(booleanLiteral);
 
   Parser stringLiteral() => char('"') & (char('"').neg()).star() & char('"');
 
   Parser numberLiteral() => digit().plus();
+
+  Parser booleanLiteral() => string('true') | string('false');
+
+  // RETURN clause support
+  Parser returnClause() => whitespace().plus() & string('RETURN') & whitespace().plus() & ref0(returnItems);
+
+  Parser returnItems() => ref0(returnItem) & (whitespace().star() & char(',') & whitespace().star() & ref0(returnItem)).star();
+
+  // RETURN item: variable, property access, or either with AS alias
+  Parser returnItem() => (ref0(returnPropertyAccess) | ref0(variable)) & ref0(asAlias).optional();
+
+  // Property access: variable.property
+  Parser returnPropertyAccess() => ref0(variable) & char('.') & ref0(propertyName);
+  
+  Parser propertyName() => ref0(variable);
+
+  // AS aliasing: AS alias_name (case insensitive)
+  Parser asAlias() => 
+    whitespace().plus() & 
+    (string('AS') | string('as') | string('As') | string('aS')) & 
+    whitespace().plus() & 
+    ref0(variable);
 
   // Helper for optional whitespace
   Parser optionalWhitespace() => whitespace().star();
