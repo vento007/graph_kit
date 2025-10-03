@@ -41,7 +41,7 @@ In-memory, typed directed multigraph with:
 - **Typed nodes** (e.g., `Person`, `Team`, `Project`, `Resource`)
 - **Typed edges** (e.g., `WORKS_FOR`, `MANAGES`, `ASSIGNED_TO`, `DEPENDS_ON`)
 - **Multiple relationships** between the same nodes
-- **Advanced Cypher queries** with WHERE clauses, logical operators, and variable-length paths
+- **Advanced Cypher queries** with WHERE clauses, RETURN projection, logical operators, and variable-length paths
 - **Complete path results** with Neo4j-style edge information
 - **Graph algorithms** for analysis (shortest path, connected components, topological sort, reachability)
 
@@ -49,6 +49,7 @@ In-memory, typed directed multigraph with:
 
 - [1. Quick Preview](#1-quick-preview)
 - [2. Complete Usage Examples](#2-complete-usage-examples)
+  - [2.9 RETURN Clause - Property Projection](#29-return-clause---property-projection)
 - [3. Graph Algorithms](#3-graph-algorithms)
 - [4. Generic Traversal Utilities](#4-generic-traversal-utilities)
 - [5. Pattern Query Examples](#5-pattern-query-examples)
@@ -265,7 +266,156 @@ final seniorWorkers = query.matchRows('MATCH person:Person-[:WORKS_FOR]->team:Te
 print(seniorWorkers); // [{person: bob, team: engineering}]
 ```
 
-### 2.9 Utility Methods
+### 2.9 RETURN Clause - Property Projection
+
+The RETURN clause lets you project specific variables and properties, creating clean, production-ready result sets instead of raw node IDs.
+
+**Why use RETURN?**
+- **Clean data**: Get only what you need (no extra lookups)
+- **Custom names**: Use AS aliases for readable column names
+- **Type-safe patterns**: Combine with Dart 3 destructuring
+- **Performance**: Reduces data transfer and processing
+
+#### Basic RETURN - Variable Projection
+
+```dart
+// Without RETURN: Get node IDs (requires separate lookups)
+final rawResults = query.matchRows('MATCH person:Person-[:WORKS_FOR]->team:Team');
+print(rawResults); // [{person: alice, team: engineering}, ...]
+
+// With RETURN: Get only what you need
+final results = query.matchRows('MATCH person:Person-[:WORKS_FOR]->team:Team RETURN person, team');
+print(results); // [{person: alice, team: engineering}, ...]
+// Same format, but explicitly controlled
+```
+
+#### Property Access - Get Actual Data
+
+```dart
+// RETURN properties directly from nodes
+final employeeData = query.matchRows(
+  'MATCH person:Person-[:WORKS_FOR]->team:Team RETURN person.name, person.salary, team.name'
+);
+print(employeeData);
+// [
+//   {'person.name': 'Alice Cooper', 'person.salary': 85000, 'team.name': 'Engineering'},
+//   {'person.name': 'Bob Wilson', 'person.salary': 95000, 'team.name': 'Engineering'}
+// ]
+
+// Access values
+print(employeeData.first['person.name']); // Alice Cooper
+print(employeeData.first['person.salary']); // 85000
+```
+
+#### AS Aliases - Custom Column Names
+
+```dart
+// Use AS to create readable column names
+final cleanResults = query.matchRows(
+  'MATCH person:Person-[:WORKS_FOR]->team:Team '
+  'RETURN person.name AS employee, person.salary AS pay, team.name AS department'
+);
+print(cleanResults);
+// [
+//   {employee: 'Alice Cooper', pay: 85000, department: 'Engineering'},
+//   {employee: 'Bob Wilson', pay: 95000, department: 'Engineering'}
+// ]
+
+// Much cleaner access!
+print(cleanResults.first['employee']); // Alice Cooper
+print(cleanResults.first['department']); // Engineering
+```
+
+#### Destructuring - Type-Safe Access (Dart 3)
+
+Use Dart's pattern matching to destructure results type-safely:
+
+```dart
+// Destructure in a loop
+final results = query.matchRows(
+  'MATCH person:Person WHERE person.salary > 90000 '
+  'RETURN person.name AS name, person.salary AS salary, person.department AS dept'
+);
+
+for (var {'name': employeeName, 'salary': pay, 'dept': department} in results) {
+  print('$employeeName earns \$$pay in $department');
+}
+// Output:
+// Bob Wilson earns $95000 in Engineering
+```
+
+Shorter syntax for single result:
+
+```dart
+final topEarner = query.matchRows(
+  'MATCH person:Person RETURN person.name AS name, person.salary AS salary'
+).first;
+
+var {'name': name, 'salary': salary} = topEarner;
+print('$name: \$$salary'); // Uses destructured variables directly
+```
+
+#### Combining WHERE + RETURN
+
+```dart
+// Filter with WHERE, then project with RETURN
+final seniorEngineers = query.matchRows(
+  'MATCH person:Person-[:WORKS_FOR]->team:Team '
+  'WHERE person.age > 30 AND team.name = "Engineering" '
+  'RETURN person.name AS engineer, person.age AS yearsOld, team.name AS teamName'
+);
+
+for (var {'engineer': name, 'yearsOld': age} in seniorEngineers) {
+  print('$name ($age years old)');
+}
+```
+
+#### Real-World Example - Employee Directory
+
+```dart
+// Complete employee report query
+final report = query.matchRows(
+  'MATCH person:Person-[:WORKS_FOR]->team:Team-[:WORKS_ON]->project:Project '
+  'WHERE person.salary >= 85000 '
+  'RETURN person.name AS employee, '
+  '       person.role AS title, '
+  '       person.salary AS compensation, '
+  '       team.name AS department, '
+  '       project.name AS currentProject'
+);
+
+// Use destructuring for clean output
+for (var {
+  'employee': name,
+  'title': role,
+  'compensation': salary,
+  'department': dept,
+  'currentProject': project
+} in report) {
+  print('$name ($role) - $dept - \$$salary - Working on: $project');
+}
+// Output:
+// Alice Cooper (Senior Engineer) - Engineering - $85000 - Working on: Web Application
+// Bob Wilson (Staff Engineer) - Engineering - $95000 - Working on: Mobile App
+```
+
+#### RETURN vs Raw IDs - Quick Comparison
+
+| Approach | Result Format | Use Case |
+|----------|---------------|----------|
+| **No RETURN** | Node IDs only | When you need to hydrate objects elsewhere |
+| **RETURN variables** | `{person: 'alice', team: 'engineering'}` | ID-based hydration pattern |
+| **RETURN properties** | `{'person.name': 'Alice', 'team.name': 'Engineering'}` | Direct property access |
+| **RETURN with AS** | `{employee: 'Alice', dept: 'Engineering'}` | Clean, production-ready data |
+
+**Try the interactive demo:**
+```bash
+cd example
+flutter run
+# Select "RETURN Clause Projection" to see live examples
+```
+
+### 2.10 Utility Methods
 
 ```dart
 // Find by type, query.findByType returns Set<String>
@@ -289,7 +439,7 @@ final engineeringWorkers = query.inTo('engineering', 'WORKS_FOR');
 print(engineeringWorkers); // {alice, bob}
 ```
 
-### 2.10 Summary of Query Methods
+### 2.11 Summary of Query Methods
 
 | Method | Returns | Use Case |
 |--------|---------|----------|
@@ -730,10 +880,15 @@ flutter run
 # WHERE clause demo - interactive Cypher query testing
 flutter run -t lib/where_demo.dart
 
+# RETURN clause demo - property projection and destructuring
+flutter run -t lib/return_demo.dart
+
 # Features:
 # - Visual graph with nodes and edges
 # - Live pattern query execution
 # - WHERE clause testing with sample data
+# - RETURN clause with before/after comparison
+# - Destructuring examples
 # - Path highlighting and visualization
 # - Example queries with one-click execution
 ```

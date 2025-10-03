@@ -17,7 +17,7 @@ class PatternQuery<N extends Node> {
   }
 
   /// Core implementation of pattern matching using parse tree
-  /// Returns List<Map<String, dynamic>> to support both node IDs and property values
+  /// Returns `List<Map<String, dynamic>>` to support both node IDs and property values
   /// 
   /// Throws [FormatException] if the pattern cannot be parsed
   List<Map<String, dynamic>> matchRows(String pattern, {String? startId}) {

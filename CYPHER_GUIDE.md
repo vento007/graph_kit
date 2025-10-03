@@ -15,6 +15,7 @@ GraphKit implements a powerful subset of the Cypher query language for graph pat
 - [Logical Operators](#logical-operators)
 - [Parentheses and Precedence](#parentheses-and-precedence)
 - [Property Comparisons](#property-comparisons)
+- [RETURN Clause - Property Projection](#return-clause---property-projection)
 - [Advanced Examples](#advanced-examples)
 
 ## Basic Pattern Matching
@@ -347,6 +348,167 @@ MATCH person:Person WHERE person.status != "inactive"
 
 # Booleans
 MATCH person:Person WHERE person.active = true
+```
+
+## RETURN Clause - Property Projection
+
+The RETURN clause projects specific variables and properties from query results, giving you clean, production-ready data instead of raw node IDs.
+
+### Basic RETURN Syntax
+
+```cypher
+# Return node IDs (variable projection)
+MATCH person:Person-[:WORKS_FOR]->team:Team RETURN person, team
+
+# Return properties
+MATCH person:Person RETURN person.name, person.age, person.salary
+
+# Return with AS aliases
+MATCH person:Person RETURN person.name AS employeeName, person.salary AS pay
+```
+
+### Property Access
+
+Access node properties using dot notation:
+
+```cypher
+# Single property
+MATCH person:Person RETURN person.name
+
+# Multiple properties from same node
+MATCH person:Person RETURN person.name, person.age, person.department
+
+# Properties from different nodes
+MATCH person:Person-[:WORKS_FOR]->team:Team
+RETURN person.name, person.role, team.name, team.budget
+```
+
+### AS Aliases - Custom Column Names
+
+Use `AS` to create readable column names (case-insensitive):
+
+```cypher
+# Basic aliasing
+MATCH person:Person RETURN person.name AS employee
+
+# Multiple aliases
+MATCH person:Person-[:WORKS_FOR]->team:Team
+RETURN person.name AS employee,
+       person.salary AS compensation,
+       team.name AS department
+
+# Case variations (all valid)
+RETURN person.name AS Name
+RETURN person.name as name
+RETURN person.name As displayName
+```
+
+**Note:** Aliases must be single identifiers (no spaces). Use camelCase or underscores:
+- `AS employeeName`
+- `AS employee_name`
+- `AS "Employee Name"` (not supported)
+
+### Combining WHERE + RETURN
+
+Filter data with WHERE, then project specific columns:
+
+```cypher
+# Filter then project
+MATCH person:Person
+WHERE person.salary > 90000
+RETURN person.name AS highEarner, person.salary AS pay
+
+# Multi-hop with filtering and projection
+MATCH person:Person-[:WORKS_FOR]->team:Team-[:WORKS_ON]->project:Project
+WHERE person.age > 30 AND project.status = "active"
+RETURN person.name AS engineer,
+       team.name AS department,
+       project.name AS activeProject
+
+# Complex filtering with clean output
+MATCH person:Person
+WHERE (person.age > 40 AND person.salary > 100000) OR person.department = "Management"
+RETURN person.name AS name, person.role AS position, person.salary AS compensation
+```
+
+### Mixing IDs and Properties
+
+Combine node IDs with property values:
+
+```cypher
+# Node ID + properties
+MATCH person:Person-[:WORKS_FOR]->team:Team
+RETURN person, person.name, team.name AS department
+
+# Useful for hydration patterns
+MATCH person:Person WHERE person.salary > 95000
+RETURN person AS id, person.name AS name, person.department AS dept
+```
+
+### Real-World RETURN Examples
+
+#### Employee Directory
+```cypher
+MATCH person:Person-[:WORKS_FOR]->team:Team
+RETURN person.name AS employee,
+       person.role AS title,
+       person.salary AS compensation,
+       team.name AS department
+```
+
+#### Project Team Report
+```cypher
+MATCH person:Person-[:WORKS_FOR]->team:Team-[:WORKS_ON]->project:Project
+WHERE project.status = "active"
+RETURN person.name AS teamMember,
+       person.role AS role,
+       team.name AS team,
+       project.name AS project,
+       project.budget AS projectBudget
+```
+
+#### High Earners Analysis
+```cypher
+MATCH person:Person
+WHERE person.salary >= 100000
+RETURN person.name AS name,
+       person.department AS dept,
+       person.salary AS annualSalary,
+       person.age AS yearsOld
+```
+
+### RETURN Result Structure
+
+Results are returned as `List<Map<String, dynamic>>`:
+
+```dart
+// Without AS aliases - uses property path as key
+[{'person.name': 'Alice', 'person.salary': 85000}]
+
+// With AS aliases - uses alias as key
+[{'employee': 'Alice', 'pay': 85000}]
+
+// Mixed
+[{'person': 'alice', 'name': 'Alice', 'dept': 'Engineering'}]
+```
+
+### Dart Destructuring (Recommended)
+
+Use Dart 3 pattern matching for type-safe access:
+
+```dart
+final results = query.matchRows(
+  'MATCH person:Person WHERE person.salary > 90000 '
+  'RETURN person.name AS name, person.salary AS salary'
+);
+
+// Destructure in loop
+for (var {'name': employeeName, 'salary': pay} in results) {
+  print('$employeeName earns \$$pay');
+}
+
+// Single result destructuring
+var {'name': name, 'salary': salary} = results.first;
 ```
 
 ## Advanced Examples
