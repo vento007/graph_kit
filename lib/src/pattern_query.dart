@@ -20,7 +20,7 @@ class PatternQuery<N extends Node> {
   /// Returns `List<Map<String, dynamic>>` to support both node IDs and property values
   /// 
   /// Throws [FormatException] if the pattern cannot be parsed
-  List<Map<String, dynamic>> matchRows(String pattern, {String? startId}) {
+  List<Map<String, dynamic>> matchRows(String pattern, {String? startId, String? startType}) {
     final result = _parser.parse(pattern);
     if (result is Failure) {
       throw FormatException(
@@ -80,62 +80,93 @@ class PatternQuery<N extends Node> {
 
     if (parts.isEmpty) return const <Map<String, dynamic>>[];
 
-    // Helper to extract alias name from a part (copied from original)
-    String aliasOf(String part) {
-      if (part.startsWith('[')) {
-        final afterEdge = part.substring(part.indexOf('-') + 1);
-        return afterEdge.split(RegExp(r'[-\[:]')).first.trim();
-      } else {
-        return part.split(RegExp(r'[-\[:]')).first.trim();
-      }
-    }
-
     // Seed rows (copied logic from original)
     List<Map<String, String>> currentRows = <Map<String, String>>[];
-    final firstAlias = aliasOf(parts.first);
+    final firstAlias = _aliasOf(parts.first);
     if (firstAlias.isEmpty) {
       return const <Map<String, dynamic>>[];
     }
 
     if (startId != null) {
-      currentRows = <Map<String, String>>[
-        {firstAlias: startId},
-      ];
+      // Validate startId exists
+      if (!graph.nodesById.containsKey(startId)) {
+        return const <Map<String, dynamic>>[];
+      }
+
+      // Try each position in pattern
+      final allRows = <Map<String, String>>[];
+
+      for (var i = 0; i < parts.length; i++) {
+        final alias = _aliasOf(parts[i]);
+
+        // Optional: skip if type doesn't match
+        if (startType != null) {
+          // Extract type from pattern part
+          final typeMatch = RegExp(r':(\w+)').firstMatch(parts[i]);
+          if (typeMatch != null) {
+            final nodeType = typeMatch.group(1);
+            if (nodeType != startType) {
+              continue;  // Skip positions that don't match type
+            }
+          }
+        }
+
+        // Seed this position
+        final seedRows = <Map<String, String>>[{alias: startId}];
+
+        // Execute from this position
+        final results = _executeFromPosition(seedRows, parts, directions, i);
+        allRows.addAll(results);
+      }
+
+      // Deduplicate results
+      final seen = <String>{};
+      currentRows = [];
+      for (final row in allRows) {
+        final key = row.entries.map((e) => '${e.key}:${e.value}').join(',');
+        if (!seen.contains(key)) {
+          seen.add(key);
+          currentRows.add(row);
+        }
+      }
     } else {
       // Parse optional type and label filter in first segment
       // TODO: Extract from parse tree instead of manual parsing
       _seedFromFirstSegment(parts.first, firstAlias, currentRows);
     }
 
-    // Traverse over each hop, expanding rows (copied from original)
-    for (var i = 0; i < parts.length - 1; i++) {
-      final part = parts[i];
-      final aliasHere = aliasOf(part);
-      final nextAlias = aliasOf(parts[i + 1]);
+    // Only traverse if startId was not used (it already executed the full pattern)
+    if (startId == null) {
+      // Traverse over each hop, expanding rows (copied from original)
+      for (var i = 0; i < parts.length - 1; i++) {
+        final part = parts[i];
+        final aliasHere = _aliasOf(part);
+        final nextAlias = _aliasOf(parts[i + 1]);
 
-      final isForward = directions[i];
-      final edgePart = isForward ? part : parts[i + 1];
-      final edgeTypes = _edgeTypeFrom(edgePart);
-      if (edgeTypes == null || edgeTypes.isEmpty) {
-        return const <Map<String, dynamic>>[];
+        final isForward = directions[i];
+        final edgePart = isForward ? part : parts[i + 1];
+        final edgeTypes = _edgeTypeFrom(edgePart);
+        if (edgeTypes == null || edgeTypes.isEmpty) {
+          return const <Map<String, dynamic>>[];
+        }
+
+        // Check if this is a variable-length relationship
+        final variableLengthSpec = _extractVariableLengthSpec(edgePart);
+        if (variableLengthSpec != null) {
+          // Handle variable-length relationship using enumeratePaths
+          final vlResults = _executeVariableLengthSegment(
+            currentRows, aliasHere, nextAlias, edgeTypes, variableLengthSpec, isForward
+          );
+          currentRows = vlResults;
+        } else {
+          // Handle single-hop relationship (existing logic)
+          currentRows = _executeSingleHopSegment(
+            currentRows, aliasHere, nextAlias, edgeTypes, isForward
+          );
+        }
+
+        if (currentRows.isEmpty) break;
       }
-
-      // Check if this is a variable-length relationship
-      final variableLengthSpec = _extractVariableLengthSpec(edgePart);
-      if (variableLengthSpec != null) {
-        // Handle variable-length relationship using enumeratePaths
-        final vlResults = _executeVariableLengthSegment(
-          currentRows, aliasHere, nextAlias, edgeTypes, variableLengthSpec, isForward
-        );
-        currentRows = vlResults;
-      } else {
-        // Handle single-hop relationship (existing logic)
-        currentRows = _executeSingleHopSegment(
-          currentRows, aliasHere, nextAlias, edgeTypes, isForward
-        );
-      }
-
-      if (currentRows.isEmpty) break;
     }
 
     // Apply WHERE clause filtering if present
@@ -150,6 +181,79 @@ class PatternQuery<N extends Node> {
 
     // Backward compatibility: no RETURN clause returns all variables
     return currentRows.map((row) => row.cast<String, dynamic>()).toList();
+  }
+
+  /// Executes pattern from a specific position bidirectionally
+  /// Used when startId matches a middle or last element in the pattern
+  List<Map<String, String>> _executeFromPosition(
+    List<Map<String, String>> seedRows,
+    List<String> parts,
+    List<bool> directions,
+    int startIndex,
+  ) {
+    var currentRows = seedRows;
+
+    // Execute backward from startIndex-1 to 0
+    for (var i = startIndex - 1; i >= 0; i--) {
+      final aliasHere = _aliasOf(parts[i + 1]); // Current position (reversed)
+      final nextAlias = _aliasOf(parts[i]);      // Target position
+
+      // Get edge info from appropriate part
+      final isForwardInPattern = directions[i];
+      final edgePart = isForwardInPattern ? parts[i] : parts[i + 1];
+      final edgeTypes = _edgeTypeFrom(edgePart);
+
+      if (edgeTypes == null || edgeTypes.isEmpty) {
+        return const <Map<String, String>>[];
+      }
+
+      // Reverse direction when going backward
+      final isForward = !isForwardInPattern;
+
+      // Check for variable-length
+      final variableLengthSpec = _extractVariableLengthSpec(edgePart);
+      if (variableLengthSpec != null) {
+        currentRows = _executeVariableLengthSegment(
+          currentRows, aliasHere, nextAlias, edgeTypes, variableLengthSpec, isForward
+        );
+      } else {
+        currentRows = _executeSingleHopSegment(
+          currentRows, aliasHere, nextAlias, edgeTypes, isForward
+        );
+      }
+
+      if (currentRows.isEmpty) return const <Map<String, String>>[];
+    }
+
+    // Execute forward from startIndex to end
+    for (var i = startIndex; i < parts.length - 1; i++) {
+      final aliasHere = _aliasOf(parts[i]);
+      final nextAlias = _aliasOf(parts[i + 1]);
+
+      final isForward = directions[i];
+      final edgePart = isForward ? parts[i] : parts[i + 1];
+      final edgeTypes = _edgeTypeFrom(edgePart);
+
+      if (edgeTypes == null || edgeTypes.isEmpty) {
+        return const <Map<String, String>>[];
+      }
+
+      // Check for variable-length
+      final variableLengthSpec = _extractVariableLengthSpec(edgePart);
+      if (variableLengthSpec != null) {
+        currentRows = _executeVariableLengthSegment(
+          currentRows, aliasHere, nextAlias, edgeTypes, variableLengthSpec, isForward
+        );
+      } else {
+        currentRows = _executeSingleHopSegment(
+          currentRows, aliasHere, nextAlias, edgeTypes, isForward
+        );
+      }
+
+      if (currentRows.isEmpty) return const <Map<String, String>>[];
+    }
+
+    return currentRows;
   }
 
   /// Executes a single-hop relationship segment
@@ -276,8 +380,8 @@ class PatternQuery<N extends Node> {
     return destinations;
   }
 
-  Map<String, Set<String>> match(String pattern, {String? startId}) {
-    final paths = matchPaths(pattern, startId: startId);
+  Map<String, Set<String>> match(String pattern, {String? startId, String? startType}) {
+    final paths = matchPaths(pattern, startId: startId, startType: startType);
     final results = <String, Set<String>>{};
     for (final path in paths) {
       for (final entry in path.nodes.entries) {
@@ -287,13 +391,13 @@ class PatternQuery<N extends Node> {
     return results;
   }
 
-  List<PathMatch> matchPaths(String pattern, {String? startId}) {
+  List<PathMatch> matchPaths(String pattern, {String? startId, String? startType}) {
     // Check if pattern has RETURN clause
     final hasReturn = RegExp(r'\s+RETURN\s+', caseSensitive: false).hasMatch(pattern);
     
     if (!hasReturn) {
       // No RETURN clause - original behavior
-      final rows = matchRows(pattern, startId: startId);
+      final rows = matchRows(pattern, startId: startId, startType: startType);
       final pathMatches = <PathMatch>[];
       
       for (final row in rows) {
@@ -387,6 +491,16 @@ class PatternQuery<N extends Node> {
           }
         }
       }
+    }
+  }
+
+  /// Extracts alias name from a pattern part
+  String _aliasOf(String part) {
+    if (part.startsWith('[')) {
+      final afterEdge = part.substring(part.indexOf('-') + 1);
+      return afterEdge.split(RegExp(r'[-\[:]')).first.trim();
+    } else {
+      return part.split(RegExp(r'[-\[:]')).first.trim();
     }
   }
 
@@ -693,13 +807,14 @@ class PatternQuery<N extends Node> {
           }
         }
       }
-    } else {
-      // Remove edge syntax if present in the middle or end
-      // Updated regex to handle multiple types with | separator and variable-length *
-      part = part.replaceAll(RegExp(r'\[\s*:[^\]]*\]'), '').trim();
-      // Remove trailing dash that might be left after edge removal
-      part = part.replaceAll(RegExp(r'-+$'), '').trim();
     }
+
+    // Remove edge syntax if present in the middle or end
+    // (applies to both branches - parts may have multiple edge specs)
+    // Updated regex to handle multiple types with | separator and variable-length *
+    part = part.replaceAll(RegExp(r'\[\s*:[^\]]*\]'), '').trim();
+    // Remove trailing dash that might be left after edge removal
+    part = part.replaceAll(RegExp(r'-+$'), '').trim();
 
     // Variable name is before any : or { characters
     final colonIdx = part.indexOf(':');
