@@ -35,6 +35,7 @@ export 'src/edge_type.dart';
 export 'src/extensions_typed.dart';
 export 'src/graph.dart';
 export 'src/graph_algorithms.dart';
+export 'src/layout.dart';
 export 'src/node.dart';
 export 'src/node_type.dart';
 export 'src/pattern_query.dart';
