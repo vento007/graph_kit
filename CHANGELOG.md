@@ -1,3 +1,11 @@
+## 0.7.5
+
+- **startId middle element support**: `startId` now matches ANY position in patterns (e.g., `matchPaths('a->b->c', startId: 'b')` now works)
+- Added optional `startType` parameter to optimize performance when starting from middle elements
+- Fixed PathMatch edge tracking bug in complex mixed-direction patterns
+- 12 comprehensive tests including 8-hop chains and mixed directions with middle-start
+- Backward compatible - no breaking API changes
+
 ## 0.7.4
 
 ### Added

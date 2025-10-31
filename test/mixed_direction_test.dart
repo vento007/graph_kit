@@ -299,12 +299,13 @@ void main() {
         startId: 'charlie'
       );
 
+      // With middle-element support, charlie matches both person1 AND person2 positions
       // Charlie follows both bob and eve
       // alice also follows bob
       // bob also follows eve
-      expect(result['person1'], equals({'charlie'}));
+      expect(result['person1'], contains('charlie'));
       expect(result['target'], containsAll(['bob', 'eve']));
-      expect(result['person2'], isNotEmpty);
+      expect(result['person2'], contains('charlie'));
     });
 
     test('same person can appear in both positions', () {
