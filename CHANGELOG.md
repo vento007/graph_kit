@@ -1,3 +1,12 @@
+## 0.7.6
+
+- **GraphLayout API**: Automatic layer/column computation for graph visualizations
+  - Eliminates hardcoded column positioning (`computeLayout()` on path results)
+  - Provides `nodeDepths` (structural positioning) and `variableDepths` (grouped positioning)
+  - Three strategies: `pattern`, `longestPath`, `topological`
+  - Handles cycles, orphan nodes, disconnected components automatically
+  - 13 comprehensive tests including diamonds, cycles, and mixed directions
+
 ## 0.7.5
 
 - **startId middle element support**: `startId` now matches ANY position in patterns (e.g., `matchPaths('a->b->c', startId: 'b')` now works)
