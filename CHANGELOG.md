@@ -5,6 +5,7 @@
 - Fixed PathMatch edge tracking bug in complex mixed-direction patterns
 - 12 comprehensive tests including 8-hop chains and mixed directions with middle-start
 - Backward compatible - no breaking API changes
+- Added backend integration tests for JSON serialization round-trip and format documentation
 
 ## 0.7.4
 
