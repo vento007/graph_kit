@@ -1,3 +1,13 @@
+## 0.7.8
+
+- **Removed LayerStrategy.topological**: Removed from enum
+  - Two strategies remain: `pattern` and `longestPath`
+- **Documentation updates**: Added missing documentation for 0.7.6 and 0.7.5 features
+  - Added comprehensive GraphLayout API section to README.md (section 10)
+  - Enhanced README section 2.4 with startId middle element examples and startType parameter
+  - Added detailed startId/startType section to CYPHER_GUIDE.md with performance tips
+  - Updated table of contents
+
 ## 0.7.7
 
 - **CONTAINS operator**: Substring matching in WHERE clauses
@@ -11,7 +21,7 @@
 - **GraphLayout API**: Automatic layer/column computation for graph visualizations
   - Eliminates hardcoded column positioning (`computeLayout()` on path results)
   - Provides `nodeDepths` (structural positioning) and `variableDepths` (grouped positioning)
-  - Three strategies: `pattern`, `longestPath`, `topological`
+  - Two strategies: `pattern`, `longestPath` (topological was removed in 0.7.7+2)
   - Handles cycles, orphan nodes, disconnected components automatically
   - 13 comprehensive tests including diamonds, cycles, and mixed directions
 

@@ -58,7 +58,8 @@ In-memory, typed directed multigraph with:
 - [7. Comparison with Cypher](#7-comparison-with-cypher)
 - [8. Design and performance](#8-design-and-performance)
 - [9. JSON Serialization](#9-json-serialization)
-- [10. Examples index](#10-examples-index)
+- [10. Graph Layout for Visualizations](#10-graph-layout-for-visualizations)
+- [11. Examples index](#11-examples-index)
 - [License](#license)
 
 
@@ -173,6 +174,57 @@ final webAppTeam = query.match(
 );
 print(webAppTeam); // {project: {web_app}, team: {engineering}, person: {alice, bob}}
 ```
+
+#### Starting from Middle or Last Elements
+
+`startId` can match **any position** in the pattern, not just the first element:
+
+```dart
+// Start from middle element (team)
+final teamConnections = query.matchPaths(
+  'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+  startId: 'engineering'  // team is in the middle!
+);
+// Returns paths where 'team' variable = 'engineering'
+
+// Start from last element (project)
+final projectPaths = query.matchPaths(
+  'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+  startId: 'web_app'  // project is last!
+);
+// Returns paths where 'project' variable = 'web_app'
+
+// Start from any element in longer chains
+final middleChain = query.matchPaths(
+  'a->b->c->d->e',
+  startId: 'node_c'  // Start from middle 'c' element
+);
+```
+
+#### Performance Optimization with startType
+
+When starting from middle/last elements, use `startType` to skip unnecessary position checks:
+
+```dart
+// Without startType: checks all 3 positions (person, team, project)
+final paths = query.matchPaths(
+  'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+  startId: 'engineering'
+);
+
+// With startType: ONLY checks 'team' position (faster!)
+final paths = query.matchPaths(
+  'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+  startId: 'engineering',
+  startType: 'Team'  // Optimization hint
+);
+```
+
+**When to use `startType`:**
+- Starting from middle or last positions
+- Large patterns (4+ elements)
+- Performance-critical queries
+- You know the node type of your startId
 
 ### 2.5 Row-wise Results - Preserve Path Relationships
 
@@ -852,7 +904,108 @@ final members = query.match('team<-[:MEMBER_OF]-user', startId: 'team1');
 print(members['user']); // {alice}
 ```
 
-## 10. Examples index
+## 10. Graph Layout for Visualizations
+
+Automatically compute layer/column positions for graph visualizations, eliminating brittle hardcoded positioning logic.
+
+### The Problem
+
+Hardcoding column positions breaks when graph structure changes:
+
+```dart
+// BAD: Hardcoded switch statement - breaks when patterns change
+final column = switch (nodeType) {
+  'Group' => 0,
+  'Policy' => 1,
+  'Asset' => 2,
+  'Virtual' => 3,
+  _ => 0,
+};
+```
+
+### The Solution: GraphLayout
+
+```dart
+final paths = query.matchPaths('group->policy->asset->virtual');
+final layout = paths.computeLayout();
+
+// Column positions computed automatically!
+final groupColumn = layout.variableLayer('group');      // 0
+final policyColumn = layout.variableLayer('policy');    // 1
+final assetColumn = layout.variableLayer('asset');      // 2
+final virtualColumn = layout.variableLayer('virtual');  // 3
+```
+
+### Key Features
+
+**Automatic positioning**: Computes layer/column for every node based on graph structure
+
+**Two positioning modes**:
+- `nodeDepths` - Exact structural position for each node ID
+- `variableDepths` - Typical position for grouping by variable name (uses median to handle outliers)
+
+**Handles edge cases gracefully**:
+- Orphan nodes (disconnected from roots)
+- Cycles
+- Multiple disconnected components
+- Nodes reachable via multiple paths
+
+### Basic Usage
+
+```dart
+// Get path results
+final paths = query.matchPaths('group-[:HAS_POLICY]->policy-[:GRANTS_ACCESS]->asset');
+final layout = paths.computeLayout();
+
+// Get column for pattern variables
+final policyColumn = layout.variableLayer('policy');
+
+// Get column for specific node ID
+final nodeColumn = layout.layerFor('node_123');
+
+// Render by column
+for (var layer = 0; layer <= layout.maxDepth; layer++) {
+  final nodesInColumn = layout.nodesInLayer(layer);
+  renderColumn(layer, nodesInColumn);
+}
+```
+
+### Layout Strategies
+
+Two strategies available (default: `longestPath`):
+
+```dart
+// Pattern order (fast, predictable - follows query left-to-right)
+final layout = paths.computeLayout(strategy: LayerStrategy.pattern);
+
+// Longest path (best for complex graphs with diamonds, minimizes crossings)
+final layout = paths.computeLayout(strategy: LayerStrategy.longestPath);
+```
+
+### GraphLayout Properties
+
+```dart
+layout.maxDepth           // Number of layers - 1
+layout.roots              // Root nodes (layer 0 entry points)
+layout.allNodes           // All unique node IDs in paths
+layout.allEdges           // All unique edges in paths
+layout.nodeDepths         // Map<String, int> of node ID → layer
+layout.variableDepths     // Map<String, int> of variable → typical layer
+layout.nodesByLayer       // Map<int, Set<String>> of layer → node IDs
+```
+
+### Complete Example
+
+See `bin/layout_demo.dart` for a comprehensive before/after comparison showing how GraphLayout eliminates hardcoded positioning.
+
+**Why use GraphLayout?**
+- ✓ No hardcoded column positions
+- ✓ Automatically adapts to graph structure changes
+- ✓ Handles orphan nodes, cycles, disconnected components
+- ✓ Works with any pattern, any node types
+- ✓ Both structural and grouped positioning available
+
+## 11. Examples index
 
 ### Dart CLI Examples
 - `bin/showcase.dart` – comprehensive graph demo with multiple query examples

@@ -15,11 +15,6 @@ enum LayerStrategy {
   /// Assigns each node to MAX depth across all paths to minimize edge crossings.
   /// Best for: Complex graphs with diamonds, multiple paths, general visualization.
   longestPath,
-
-  /// Use topological sort (requires DAG + Graph instance).
-  /// Falls back to longestPath if graph contains cycles.
-  /// Best for: Dependency visualization, build systems, task scheduling.
-  topological,
 }
 
 /// Computed layout information for visualizing graph query results.
@@ -176,15 +171,6 @@ extension PathMatchLayout on List<PathMatch> {
       case LayerStrategy.longestPath:
         nodeDepths = _computeLongestPathDepths(allNodes, allEdges);
         break;
-      case LayerStrategy.topological:
-        if (graph == null) {
-          throw ArgumentError(
-            'Graph instance required for topological strategy. '
-            'Either provide graph parameter or use a different strategy.',
-          );
-        }
-        nodeDepths = _computeTopologicalDepths(graph, allNodes, allEdges);
-        break;
     }
 
     // 3. Find roots (nodes with no incoming edges in the path set)
@@ -337,19 +323,5 @@ extension PathMatchLayout on List<PathMatch> {
     }
 
     return nodeDepths;
-  }
-
-  /// Strategy 3: Topological sort-based layering.
-  ///
-  /// Uses Kahn's algorithm for DAG ordering. Falls back to longestPath
-  /// if graph contains cycles.
-  Map<String, int> _computeTopologicalDepths(
-    Graph graph,
-    Set<String> nodes,
-    Set<EdgeTriple> edges,
-  ) {
-    // Just use longest path on the path edges - simpler and more reliable
-    // than trying to use the full graph topology
-    return _computeLongestPathDepths(nodes, edges);
   }
 }
