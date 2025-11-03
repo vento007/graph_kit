@@ -1,3 +1,11 @@
+## 0.7.7
+
+- **CONTAINS operator**: Substring matching in WHERE clauses
+  - Case-insensitive search: `WHERE asset.label CONTAINS "gw"`
+  - Works on all properties: `id`, `type`, `label`, and custom properties
+  - Integrates with AND/OR logic: `WHERE a.ip CONTAINS "10.0" OR a.hostname CONTAINS "prod"`
+  - Supported in `match()`, `matchRows()`, and `matchPaths()`
+
 ## 0.7.6
 
 - **GraphLayout API**: Automatic layer/column computation for graph visualizations

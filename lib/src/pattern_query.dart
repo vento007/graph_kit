@@ -1195,9 +1195,23 @@ class PatternQuery<N extends Node> {
     final node = graph.nodesById[nodeId];
     if (node == null) return false; // Node doesn't exist should fail
 
-    // Get property value
-    final propValue = node.properties?[property];
-    if (propValue == null) return false;
+    // Get property value - check direct Node properties first
+    dynamic propValue;
+    switch (property) {
+      case 'id':
+        propValue = node.id;
+        break;
+      case 'type':
+        propValue = node.type;
+        break;
+      case 'label':
+        propValue = node.label;
+        break;
+      default:
+        // Check custom properties
+        propValue = node.properties?[property];
+        if (propValue == null) return false;
+    }
 
     // Parse comparison value
     final comparisonValue = _parseValue(valueStr);
@@ -1257,6 +1271,7 @@ class PatternQuery<N extends Node> {
       switch (operator) {
         case '=': return propStr == compStr;
         case '!=': return propStr != compStr;
+        case 'CONTAINS': return propStr.toLowerCase().contains(compStr.toLowerCase());
         default: return false; // Other operators not supported for strings
       }
     } catch (e) {

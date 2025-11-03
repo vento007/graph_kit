@@ -637,7 +637,7 @@ Cypher is a language designed to describe patterns in graphs. Instead of writing
 
 GraphKit supports a **subset** of Cypher - the most useful parts without the complexity:
 
-**Supported**: Basic patterns, node types, relationships, label filters, variable-length paths, WHERE clauses with logical operators, parentheses
+**Supported**: Basic patterns, node types, relationships, label filters, variable-length paths, WHERE clauses with logical operators, parentheses, CONTAINS operator for substring matching
 **Not supported**: Aggregations, complex subqueries
 
 This gives you the power of graph queries without learning the full Cypher language.
