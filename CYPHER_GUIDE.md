@@ -42,6 +42,107 @@ MATCH user
 MATCH person:Person
 ```
 
+## Starting from Specific Nodes (startId)
+
+The `startId` parameter lets you start pattern matching from a specific node, making queries more efficient by only exploring relevant subgraphs.
+
+### Basic Usage
+
+```cypher
+# Start from a specific person
+query.match('person-[:WORKS_FOR]->team', startId: 'alice')
+# Only matches paths starting from alice
+
+# Start from a specific team
+query.match('person-[:WORKS_FOR]->team', startId: 'engineering')
+# Only matches paths where team = engineering
+```
+
+### Starting from Any Position
+
+**Important:** `startId` can match **any element** in the pattern, not just the first:
+
+```cypher
+# Pattern: a->b->c
+# startId can match 'a', 'b', OR 'c'
+
+# Start from first element
+query.matchPaths('person->team->project', startId: 'alice')
+# Matches paths where person = alice
+
+# Start from middle element
+query.matchPaths('person->team->project', startId: 'engineering')
+# Matches paths where team = engineering
+
+# Start from last element
+query.matchPaths('person->team->project', startId: 'web_app')
+# Matches paths where project = web_app
+```
+
+### Performance Optimization with startType
+
+When starting from middle or last elements, use `startType` to tell graph_kit which position to check:
+
+```cypher
+# Without startType: checks all positions (slower)
+query.matchPaths(
+  'person->team->project',
+  startId: 'engineering'
+)
+# Checks if 'engineering' matches person, team, OR project
+
+# With startType: only checks specified type (faster!)
+query.matchPaths(
+  'person->team->project',
+  startId: 'engineering',
+  startType: 'Team'
+)
+# ONLY checks if 'engineering' matches team position
+```
+
+### When to Use startType
+
+Use `startType` for better performance when:
+- Starting from middle or last elements
+- Working with long patterns (4+ elements)
+- Running performance-critical queries
+- You know the node type of your startId
+
+**Example with long pattern:**
+
+```cypher
+# 5-element pattern
+query.matchPaths(
+  'a->b->c->d->e',
+  startId: 'node_d',
+  startType: 'NodeTypeD'  # Skip checking a, b, c positions
+)
+```
+
+### Common Patterns
+
+```cypher
+# Find all projects for a team (start from middle)
+query.matchPaths(
+  'person->team->project',
+  startId: 'engineering',
+  startType: 'Team'
+)
+
+# Find all people working on a project (start from end)
+query.matchPaths(
+  'person->team->project',
+  startId: 'web_app',
+  startType: 'Project'
+)
+
+# Backward traversal from specific node
+query.matchPaths(
+  'project<-[:ASSIGNED_TO]-team<-[:WORKS_FOR]-person',
+  startId: 'web_app'
+)
+```
+
 ## Node Types and Labels
 
 ### Node Types

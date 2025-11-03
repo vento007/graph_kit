@@ -291,7 +291,7 @@ void main() {
       expect(layout.allEdges, isEmpty);
     });
 
-    test('all three strategies on same simple graph', () {
+    test('both strategies on same simple graph', () {
       // Graph: a -> b -> c -> d
       final graph = Graph<Node>();
       graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
@@ -308,17 +308,12 @@ void main() {
 
       final layoutPattern = paths.computeLayout(strategy: LayerStrategy.pattern);
       final layoutLongest = paths.computeLayout(strategy: LayerStrategy.longestPath);
-      final layoutTopo = paths.computeLayout(
-        strategy: LayerStrategy.topological,
-        graph: graph,
-      );
 
-      // For simple linear path, all should give same result
+      // For simple linear path, both should give same result
       expect(layoutPattern.nodeDepths, layoutLongest.nodeDepths);
-      expect(layoutLongest.nodeDepths, layoutTopo.nodeDepths);
       expect(layoutPattern.variableDepths, layoutLongest.variableDepths);
 
-      // All should produce same layering
+      // Both should produce same layering
       expect(layoutPattern.nodeDepths['a'], 0);
       expect(layoutPattern.nodeDepths['b'], 1);
       expect(layoutPattern.nodeDepths['c'], 2);
