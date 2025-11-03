@@ -1,0 +1,302 @@
+import 'package:graph_kit/graph_kit.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group('WHERE CONTAINS operator', () {
+    late Graph<Node> graph;
+    late PatternQuery<Node> query;
+
+    setUp(() {
+      graph = Graph<Node>();
+      query = PatternQuery(graph);
+
+      // Create nodes with various properties for testing
+      graph.addNode(Node(
+        id: 'asset1',
+        type: 'Asset',
+        label: 'web-server-gw-01',
+        properties: {
+          'ip': '10.0.1.100',
+          'hostname': 'web-gw',
+          'status': 'online',
+          'tags': 'production,gateway',
+        },
+      ));
+
+      graph.addNode(Node(
+        id: 'asset2',
+        type: 'Asset',
+        label: 'db-server-prod',
+        properties: {
+          'ip': '10.0.2.50',
+          'hostname': 'db-prod',
+          'status': 'online',
+          'tags': 'production,database',
+        },
+      ));
+
+      graph.addNode(Node(
+        id: 'asset3',
+        type: 'Asset',
+        label: 'test-gw-router',
+        properties: {
+          'ip': '192.168.1.1',
+          'hostname': 'test-gw',
+          'status': 'offline',
+          'tags': 'testing,gateway',
+        },
+      ));
+
+      graph.addNode(Node(
+        id: 'asset4',
+        type: 'Asset',
+        label: 'dev-workstation',
+        properties: {
+          'ip': '192.168.2.100',
+          'hostname': 'dev-ws',
+          'status': 'online',
+          'tags': 'development',
+        },
+      ));
+
+      graph.addNode(Node(
+        id: 'policy1',
+        type: 'Policy',
+        label: 'Production Access',
+        properties: {'department': 'Engineering'},
+      ));
+
+      graph.addNode(Node(
+        id: 'policy2',
+        type: 'Policy',
+        label: 'Test Access',
+        properties: {'department': 'QA'},
+      ));
+
+      // Create edges
+      graph.addEdge('policy1', 'GRANTS_ACCESS', 'asset1');
+      graph.addEdge('policy1', 'GRANTS_ACCESS', 'asset2');
+      graph.addEdge('policy2', 'GRANTS_ACCESS', 'asset3');
+      graph.addEdge('policy2', 'GRANTS_ACCESS', 'asset4');
+    });
+
+    group('Basic CONTAINS functionality', () {
+      test('should find nodes with label containing substring', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.label CONTAINS "gw"',
+        );
+
+        expect(results['asset']?.length, equals(2));
+        expect(results['asset'], containsAll(['asset1', 'asset3']));
+      });
+
+      test('should be case-insensitive', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.label CONTAINS "GW"',
+        );
+
+        expect(results['asset']?.length, equals(2));
+        expect(results['asset'], containsAll(['asset1', 'asset3']));
+      });
+
+      test('should find nodes with property containing substring', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.ip CONTAINS "10.0"',
+        );
+
+        expect(results['asset']?.length, equals(2));
+        expect(results['asset'], containsAll(['asset1', 'asset2']));
+      });
+
+      test('should return empty when no matches', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.label CONTAINS "nonexistent"',
+        );
+
+        expect(results['asset'], anyOf(isNull, isEmpty));
+      });
+
+      test('should handle exact match', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.status CONTAINS "online"',
+        );
+
+        expect(results['asset']?.length, equals(3));
+        expect(results['asset'], containsAll(['asset1', 'asset2', 'asset4']));
+      });
+
+      test('should work with partial IP addresses', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.ip CONTAINS "192.168"',
+        );
+
+        expect(results['asset']?.length, equals(2));
+        expect(results['asset'], containsAll(['asset3', 'asset4']));
+      });
+    });
+
+    group('CONTAINS with logical operators', () {
+      test('should work with AND operator', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.label CONTAINS "gw" AND asset.status = "online"',
+        );
+
+        expect(results['asset'], contains('asset1'));
+        expect(results['asset'], isNot(contains('asset3'))); // offline
+      });
+
+      test('should work with OR operator', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.label CONTAINS "gw" OR asset.label CONTAINS "prod"',
+        );
+
+        expect(results['asset']?.length, equals(3));
+        expect(results['asset'], containsAll(['asset1', 'asset2', 'asset3'])); // asset1 has gw, asset2 has prod, asset3 has gw
+      });
+
+      test('should work with parentheses', () {
+        final results = query.match(
+          'asset:Asset WHERE (asset.label CONTAINS "gw" OR asset.label CONTAINS "prod") AND asset.status = "online"',
+        );
+
+        expect(results['asset']?.length, equals(2));
+        expect(results['asset'], containsAll(['asset1', 'asset2']));
+      });
+
+      test('should combine with comparison operators', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.ip CONTAINS "10.0" AND asset.status = "online"',
+        );
+
+        expect(results['asset']?.length, equals(2));
+        expect(results['asset'], containsAll(['asset1', 'asset2']));
+      });
+    });
+
+    group('CONTAINS in pattern queries', () {
+      test('should filter pattern matches', () {
+        final results = query.match(
+          'policy:Policy-[:GRANTS_ACCESS]->asset:Asset WHERE asset.label CONTAINS "gw"',
+        );
+
+        expect(results['asset'], containsAll(['asset1', 'asset3']));
+        expect(results['policy'], containsAll(['policy1', 'policy2']));
+      });
+
+      test('should filter on multiple node types', () {
+        final results = query.match(
+          'policy:Policy-[:GRANTS_ACCESS]->asset:Asset WHERE policy.department CONTAINS "Eng" AND asset.status = "online"',
+        );
+
+        expect(results['policy'], contains('policy1'));
+        expect(results['asset'], containsAll(['asset1', 'asset2']));
+      });
+
+      test('should work with startId parameter', () {
+        final results = query.match(
+          'policy:Policy-[:GRANTS_ACCESS]->asset:Asset WHERE asset.ip CONTAINS "10.0"',
+          startId: 'policy1',
+        );
+
+        expect(results['policy'], contains('policy1'));
+        expect(results['asset'], containsAll(['asset1', 'asset2']));
+      });
+    });
+
+    group('CONTAINS with matchRows and matchPaths', () {
+      test('matchRows should work with CONTAINS', () {
+        final results = query.matchRows(
+          'asset:Asset WHERE asset.tags CONTAINS "gateway"',
+        );
+
+        expect(results.length, equals(2));
+        expect(results.map((r) => r['asset']), containsAll(['asset1', 'asset3']));
+      });
+
+      test('matchPaths should work with CONTAINS', () {
+        final paths = query.matchPaths(
+          'policy-[:GRANTS_ACCESS]->asset WHERE asset.label CONTAINS "server"',
+        );
+
+        expect(paths.length, equals(2));
+
+        final assetIds = paths.map((p) => p.nodes['asset']).toSet();
+        expect(assetIds, containsAll(['asset1', 'asset2']));
+      });
+
+      // TODO: Add test for matchPaths edge preservation once matchPaths + WHERE interaction is fixed
+    });
+
+    group('Edge cases', () {
+      test('should handle empty string search', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.label CONTAINS ""',
+        );
+
+        // Empty string is contained in all strings
+        expect(results['asset']?.length, equals(4));
+      });
+
+      test('should handle single character search', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.ip CONTAINS "1"',
+        );
+
+        // All IPs contain "1"
+        expect(results['asset']?.length, equals(4));
+      });
+
+      test('should handle special characters', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.ip CONTAINS "."',
+        );
+
+        // All IPs contain "."
+        expect(results['asset']?.length, equals(4));
+      });
+
+      test('should handle numeric property as string', () {
+        graph.addNode(Node(
+          id: 'asset5',
+          type: 'Asset',
+          label: 'numbered',
+          properties: {'port': 8080},
+        ));
+
+        final results = query.match(
+          'asset:Asset WHERE asset.port CONTAINS "80"',
+        );
+
+        expect(results['asset'], contains('asset5'));
+      });
+
+      test('should return false for missing property', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.nonexistent CONTAINS "test"',
+        );
+
+        expect(results['asset'], anyOf(isNull, isEmpty));
+      });
+    });
+
+    group('Integration with existing WHERE features', () {
+      test('should work with RETURN clause', () {
+        final results = query.match(
+          'asset:Asset WHERE asset.label CONTAINS "gw" RETURN asset',
+        );
+
+        expect(results['asset']?.length, equals(2));
+        expect(results['asset'], containsAll(['asset1', 'asset3']));
+      });
+
+      test('should work with complex boolean expressions', () {
+        final results = query.match(
+          'asset:Asset WHERE (asset.label CONTAINS "gw" AND asset.status = "online") OR (asset.label CONTAINS "prod" AND asset.ip CONTAINS "10.0")',
+        );
+
+        expect(results['asset']?.length, equals(2));
+        expect(results['asset'], containsAll(['asset1', 'asset2']));
+      });
+    });
+  });
+}

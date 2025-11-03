@@ -72,7 +72,7 @@ class CypherPatternGrammar extends GrammarDefinition {
 
   Parser propertyExpression() => ref0(variable) & char('.') & ref0(variable);
 
-  Parser comparisonOperator() => string('>=') | string('<=') | string('!=') | char('>') | char('<') | char('=');
+  Parser comparisonOperator() => string('CONTAINS') | string('>=') | string('<=') | string('!=') | char('>') | char('<') | char('=');
 
   Parser value() => ref0(stringLiteral) | ref0(numberLiteral) | ref0(booleanLiteral);
 

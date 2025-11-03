@@ -335,6 +335,7 @@ person.age > 30 AND person.salary > 80000 OR person.department = "Management"
 - `<=` - Less than or equal
 - `=` - Equal
 - `!=` - Not equal
+- `CONTAINS` - Substring match (case-insensitive)
 
 ### Data Types
 ```cypher
@@ -348,6 +349,14 @@ MATCH person:Person WHERE person.status != "inactive"
 
 # Booleans
 MATCH person:Person WHERE person.active = true
+
+# Substring matching with CONTAINS (case-insensitive)
+MATCH asset:Asset WHERE asset.label CONTAINS "gw"
+MATCH asset:Asset WHERE asset.ip CONTAINS "192.168"
+MATCH person:Person WHERE person.name CONTAINS "john"  # matches "John", "Johnny", etc.
+
+# CONTAINS works with direct properties (id, type, label) and custom properties
+MATCH node:Asset WHERE node.label CONTAINS "server" OR node.hostname CONTAINS "prod"
 ```
 
 ## RETURN Clause - Property Projection
