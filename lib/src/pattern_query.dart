@@ -667,7 +667,7 @@ class PatternQuery<N extends Node> {
     return null;
   }
 
-  List<PathEdge> _buildEdgesForRow(String pattern, Map<String, String> row) {
+  List<PathEdge> buildEdgesForRow(String pattern, Map<String, String> row) {
     final edges = <PathEdge>[];
 
     // Strip optional MATCH keyword
