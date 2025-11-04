@@ -1,3 +1,7 @@
+## 0.7.9
+
+- **Fixed variable-length path queries**: Now returns complete multi-hop paths with edges
+
 ## 0.7.8
 
 - **Removed LayerStrategy.topological**: Removed from enum
