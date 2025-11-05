@@ -392,57 +392,48 @@ class PatternQuery<N extends Node> {
   }
 
   List<PathMatch> matchPaths(String pattern, {String? startId, String? startType}) {
-    // Check if pattern has RETURN clause
     final hasReturn = RegExp(r'\s+RETURN\s+', caseSensitive: false).hasMatch(pattern);
-    
+
     if (!hasReturn) {
-      // No RETURN clause - original behavior
       final rows = matchRows(pattern, startId: startId, startType: startType);
       final pathMatches = <PathMatch>[];
-      
+
       for (final row in rows) {
-        // Extract only string node IDs for PathMatch.nodes
         final nodeIds = <String, String>{};
         for (final entry in row.entries) {
-          if (entry.value is String) {
-            nodeIds[entry.key] = entry.value as String;
-          }
+          if (entry.value is String) nodeIds[entry.key] = entry.value as String;
         }
-        final edges = _buildEdgesForRow(pattern, nodeIds);
-        pathMatches.add(PathMatch(nodes: nodeIds, edges: edges));
+        final sequences = _buildPathEdgeSequencesForRow(pattern, nodeIds);
+        for (final edges in sequences) {
+          pathMatches.add(PathMatch(nodes: Map<String, String>.from(nodeIds), edges: edges));
+        }
       }
       return pathMatches;
     }
-    
-    // Has RETURN clause - need both filtered and unfiltered results
+
     final filteredRows = matchRows(pattern, startId: startId);
     final patternWithoutReturn = pattern.replaceAll(RegExp(r'\s+RETURN\s+.+$', caseSensitive: false), '');
     final unfilteredRows = matchRows(patternWithoutReturn, startId: startId);
-    
+
     final pathMatches = <PathMatch>[];
-    
-    // Both result sets should have the same length (same matches, different projections)
+
     for (var i = 0; i < filteredRows.length && i < unfilteredRows.length; i++) {
-      // Use filtered row for PathMatch.nodes (respects RETURN variable filtering)
-      final nodeIds = <String, String>{};
+      final filteredIds = <String, String>{};
       for (final entry in filteredRows[i].entries) {
-        if (entry.value is String) {
-          nodeIds[entry.key] = entry.value as String;
-        }
+        if (entry.value is String) filteredIds[entry.key] = entry.value as String;
       }
-      
-      // Use unfiltered row for building edges (needs all variables)
+
       final unfilteredIds = <String, String>{};
       for (final entry in unfilteredRows[i].entries) {
-        if (entry.value is String) {
-          unfilteredIds[entry.key] = entry.value as String;
-        }
+        if (entry.value is String) unfilteredIds[entry.key] = entry.value as String;
       }
-      
-      final edges = _buildEdgesForRow(patternWithoutReturn, unfilteredIds);
-      pathMatches.add(PathMatch(nodes: nodeIds, edges: edges));
+
+      final sequences = _buildPathEdgeSequencesForRow(patternWithoutReturn, unfilteredIds);
+      for (final edges in sequences) {
+        pathMatches.add(PathMatch(nodes: Map<String, String>.from(filteredIds), edges: edges));
+      }
     }
-    
+
     return pathMatches;
   }
 
@@ -676,7 +667,7 @@ class PatternQuery<N extends Node> {
     return null;
   }
 
-  List<PathEdge> _buildEdgesForRow(String pattern, Map<String, String> row) {
+  List<PathEdge> buildEdgesForRow(String pattern, Map<String, String> row) {
     final edges = <PathEdge>[];
 
     // Strip optional MATCH keyword
@@ -788,6 +779,177 @@ class PatternQuery<N extends Node> {
     }
 
     return edges;
+  }
+
+  List<List<PathEdge>> _buildPathEdgeSequencesForRow(String pattern, Map<String, String> row) {
+    var cleanPattern = pattern.trim();
+    if (cleanPattern.toUpperCase().startsWith('MATCH ')) {
+      cleanPattern = cleanPattern.substring(6).trim();
+    }
+
+    final parts = <String>[];
+    final directions = <bool>[];
+
+    int i = 0;
+    int bracketDepth = 0;
+    int lastSplit = 0;
+    while (i < cleanPattern.length) {
+      final ch = cleanPattern[i];
+      if (ch == '[') {
+        bracketDepth++;
+        i++;
+        continue;
+      }
+      if (ch == ']') {
+        bracketDepth = bracketDepth > 0 ? bracketDepth - 1 : -1;
+        if (bracketDepth < 0) break;
+        i++;
+        continue;
+      }
+      if (bracketDepth == 0) {
+        if (ch == '-' && i + 1 < cleanPattern.length && cleanPattern[i + 1] == '>') {
+          parts.add(cleanPattern.substring(lastSplit, i).trim());
+          directions.add(true);
+          i += 2;
+          lastSplit = i;
+          continue;
+        }
+        if (ch == '<' && i + 1 < cleanPattern.length && cleanPattern[i + 1] == '-') {
+          parts.add(cleanPattern.substring(lastSplit, i).trim());
+          directions.add(false);
+          i += 2;
+          lastSplit = i;
+          continue;
+        }
+      }
+      i++;
+    }
+    if (lastSplit <= cleanPattern.length) {
+      final tail = cleanPattern.substring(lastSplit).trim();
+      if (tail.isNotEmpty) parts.add(tail);
+    }
+
+    var sequences = <List<PathEdge>>[<PathEdge>[]];
+
+    for (int si = 0; si < directions.length; si++) {
+      final fromPart = parts[si];
+      final toPart = parts[si + 1];
+      final isForward = directions[si];
+
+      final fromVar = _extractVariableName(fromPart);
+      final toVar = _extractVariableName(toPart);
+      if (fromVar == null || toVar == null) return const <List<PathEdge>>[];
+      if (!row.containsKey(fromVar) || !row.containsKey(toVar)) return const <List<PathEdge>>[];
+
+      final edgePart = isForward ? fromPart : toPart;
+      final edgeTypes = _edgeTypeFrom(edgePart);
+      if (edgeTypes == null || edgeTypes.isEmpty) return const <List<PathEdge>>[];
+
+      final vlSpec = _extractVariableLengthSpec(edgePart);
+      final newSequences = <List<PathEdge>>[];
+
+      if (vlSpec == null) {
+        final fromId = isForward ? row[fromVar]! : row[toVar]!;
+        final toId = isForward ? row[toVar]! : row[fromVar]!;
+
+        String? actualType;
+        for (final t in edgeTypes) {
+          if (graph.hasEdge(fromId, t, toId)) {
+            actualType = t;
+            break;
+          }
+        }
+        if (actualType == null) return const <List<PathEdge>>[];
+
+        final hopEdge = isForward
+            ? PathEdge(from: row[fromVar]!, to: row[toVar]!, type: actualType, fromVariable: fromVar, toVariable: toVar)
+            : PathEdge(from: row[toVar]!, to: row[fromVar]!, type: actualType, fromVariable: toVar, toVariable: fromVar);
+
+        for (final seq in sequences) {
+          final next = List<PathEdge>.from(seq)..add(hopEdge);
+          newSequences.add(next);
+        }
+      } else {
+        final startId = isForward ? row[fromVar]! : row[toVar]!;
+        final endId = isForward ? row[toVar]! : row[fromVar]!;
+
+        final vlSequences = _enumerateVariableLengthEdgeSequences(
+          fromId: startId,
+          toId: endId,
+          edgeTypes: edgeTypes,
+          spec: vlSpec,
+          isForward: isForward,
+          fromVariable: fromVar,
+          toVariable: toVar,
+        );
+
+        if (vlSequences.isEmpty) return const <List<PathEdge>>[];
+
+        for (final seq in sequences) {
+          for (final vlSeq in vlSequences) {
+            final next = List<PathEdge>.from(seq)..addAll(vlSeq);
+            newSequences.add(next);
+          }
+        }
+      }
+
+      sequences = newSequences;
+      if (sequences.isEmpty) return const <List<PathEdge>>[];
+    }
+
+    return sequences;
+  }
+
+  List<List<PathEdge>> _enumerateVariableLengthEdgeSequences({
+    required String fromId,
+    required String toId,
+    required List<String> edgeTypes,
+    required VariableLengthSpec spec,
+    required bool isForward,
+    required String fromVariable,
+    required String toVariable,
+  }) {
+    final results = <List<PathEdge>>[];
+    final maxHops = spec.effectiveMaxHops;
+    final minHops = spec.effectiveMinHops;
+
+    if (fromId == toId && minHops == 0) {
+      results.add(<PathEdge>[]);
+    }
+
+    final visited = <String>{fromId};
+
+    void dfs(String currentId, int depth, List<PathEdge> acc) {
+      if (depth > maxHops) return;
+
+      if (currentId == toId && depth >= minHops) {
+        results.add(List<PathEdge>.from(acc));
+      }
+
+      if (depth == maxHops) return;
+
+      for (final type in edgeTypes) {
+        final neighbors = isForward
+            ? graph.outNeighbors(currentId, type)
+            : graph.inNeighbors(currentId, type);
+        for (final nb in neighbors) {
+          if (visited.contains(nb)) continue;
+
+          final edge = isForward
+              ? PathEdge(from: currentId, to: nb, type: type, fromVariable: fromVariable, toVariable: toVariable)
+              : PathEdge(from: nb, to: currentId, type: type, fromVariable: toVariable, toVariable: fromVariable);
+
+          visited.add(nb);
+          acc.add(edge);
+          dfs(nb, depth + 1, acc);
+          acc.removeLast();
+          visited.remove(nb);
+        }
+      }
+    }
+
+    dfs(fromId, 0, <PathEdge>[]);
+    return results;
   }
 
   /// Extract variable name from a pattern part (e.g., "user:User{label=Alice}" -> "user")
