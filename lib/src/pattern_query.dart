@@ -20,7 +20,7 @@ class PatternQuery<N extends Node> {
   /// Returns `List<Map<String, dynamic>>` to support both node IDs and property values
   /// 
   /// Throws [FormatException] if the pattern cannot be parsed
-  List<Map<String, dynamic>> matchRows(String pattern, {String? startId, String? startType}) {
+  List<Map<String, dynamic>> matchRows(String pattern, {String? startId, List<String>? startIds, String? startType}) {
     final result = _parser.parse(pattern);
     if (result is Failure) {
       throw FormatException(
@@ -87,43 +87,56 @@ class PatternQuery<N extends Node> {
       return const <Map<String, dynamic>>[];
     }
 
-    if (startId != null) {
-      // Validate startId exists
-      if (!graph.nodesById.containsKey(startId)) {
+    // Validate and normalize start parameters
+    if (startId != null && startIds != null) {
+      throw ArgumentError('Cannot specify both startId and startIds');
+    }
+    final effectiveStartIds = startIds ?? (startId != null ? [startId] : null);
+
+    if (effectiveStartIds != null && effectiveStartIds.isNotEmpty) {
+      // Validate and filter to only existing node IDs
+      final validStartIds = effectiveStartIds
+          .where((id) => graph.nodesById.containsKey(id))
+          .toList();
+
+      if (validStartIds.isEmpty) {
         return const <Map<String, dynamic>>[];
       }
 
-      // Try each position in pattern
+      // Try each position in pattern for each startId
       final allRows = <Map<String, String>>[];
 
-      for (var i = 0; i < parts.length; i++) {
-        final alias = _aliasOf(parts[i]);
+      for (final singleStartId in validStartIds) {
+        for (var i = 0; i < parts.length; i++) {
+          final alias = _aliasOf(parts[i]);
 
-        // Optional: skip if type doesn't match
-        if (startType != null) {
-          // Extract type from pattern part
-          final typeMatch = RegExp(r':(\w+)').firstMatch(parts[i]);
-          if (typeMatch != null) {
-            final nodeType = typeMatch.group(1);
-            if (nodeType != startType) {
-              continue;  // Skip positions that don't match type
+          // Optional: skip if type doesn't match
+          if (startType != null) {
+            // Extract type from pattern part
+            final typeMatch = RegExp(r':(\w+)').firstMatch(parts[i]);
+            if (typeMatch != null) {
+              final nodeType = typeMatch.group(1);
+              if (nodeType != startType) {
+                continue;  // Skip positions that don't match type
+              }
             }
           }
+
+          // Seed this position
+          final seedRows = <Map<String, String>>[{alias: singleStartId}];
+
+          // Execute from this position
+          final results = _executeFromPosition(seedRows, parts, directions, i);
+          allRows.addAll(results);
         }
-
-        // Seed this position
-        final seedRows = <Map<String, String>>[{alias: startId}];
-
-        // Execute from this position
-        final results = _executeFromPosition(seedRows, parts, directions, i);
-        allRows.addAll(results);
       }
 
-      // Deduplicate results
+      // Deduplicate results with sorted keys for deterministic signatures
       final seen = <String>{};
       currentRows = [];
       for (final row in allRows) {
-        final key = row.entries.map((e) => '${e.key}:${e.value}').join(',');
+        final sortedKeys = row.keys.toList()..sort();
+        final key = sortedKeys.map((k) => '$k:${row[k]}').join(',');
         if (!seen.contains(key)) {
           seen.add(key);
           currentRows.add(row);
@@ -135,8 +148,8 @@ class PatternQuery<N extends Node> {
       _seedFromFirstSegment(parts.first, firstAlias, currentRows);
     }
 
-    // Only traverse if startId was not used (it already executed the full pattern)
-    if (startId == null) {
+    // Only traverse if start filtering was not used (it already executed the full pattern)
+    if (effectiveStartIds == null || effectiveStartIds.isEmpty) {
       // Traverse over each hop, expanding rows (copied from original)
       for (var i = 0; i < parts.length - 1; i++) {
         final part = parts[i];
@@ -380,8 +393,8 @@ class PatternQuery<N extends Node> {
     return destinations;
   }
 
-  Map<String, Set<String>> match(String pattern, {String? startId, String? startType}) {
-    final paths = matchPaths(pattern, startId: startId, startType: startType);
+  Map<String, Set<String>> match(String pattern, {String? startId, List<String>? startIds, String? startType}) {
+    final paths = matchPaths(pattern, startId: startId, startIds: startIds, startType: startType);
     final results = <String, Set<String>>{};
     for (final path in paths) {
       for (final entry in path.nodes.entries) {
@@ -391,11 +404,11 @@ class PatternQuery<N extends Node> {
     return results;
   }
 
-  List<PathMatch> matchPaths(String pattern, {String? startId, String? startType}) {
+  List<PathMatch> matchPaths(String pattern, {String? startId, List<String>? startIds, String? startType}) {
     final hasReturn = RegExp(r'\s+RETURN\s+', caseSensitive: false).hasMatch(pattern);
 
     if (!hasReturn) {
-      final rows = matchRows(pattern, startId: startId, startType: startType);
+      final rows = matchRows(pattern, startId: startId, startIds: startIds, startType: startType);
       final pathMatches = <PathMatch>[];
 
       for (final row in rows) {
@@ -411,9 +424,9 @@ class PatternQuery<N extends Node> {
       return pathMatches;
     }
 
-    final filteredRows = matchRows(pattern, startId: startId);
+    final filteredRows = matchRows(pattern, startId: startId, startIds: startIds);
     final patternWithoutReturn = pattern.replaceAll(RegExp(r'\s+RETURN\s+.+$', caseSensitive: false), '');
-    final unfilteredRows = matchRows(patternWithoutReturn, startId: startId);
+    final unfilteredRows = matchRows(patternWithoutReturn, startId: startId, startIds: startIds);
 
     final pathMatches = <PathMatch>[];
 
@@ -1066,11 +1079,12 @@ class PatternQuery<N extends Node> {
   List<Map<String, dynamic>> matchRowsMany(
     List<String> patterns, {
     String? startId,
+    List<String>? startIds,
   }) {
     final out = <Map<String, dynamic>>[];
     final seen = <String>{};
     for (final p in patterns) {
-      final rows = matchRows(p, startId: startId);
+      final rows = matchRows(p, startId: startId, startIds: startIds);
       for (final r in rows) {
         final keys = r.keys.toList()..sort();
         final sig = keys.map((k) => '$k=${r[k]}').join('|');
@@ -1081,10 +1095,14 @@ class PatternQuery<N extends Node> {
   }
 
   /// Execute multiple patterns and unions the results by variable name.
-  Map<String, Set<String>> matchMany(List<String> patterns, {String? startId}) {
+  Map<String, Set<String>> matchMany(
+    List<String> patterns, {
+    String? startId,
+    List<String>? startIds,
+  }) {
     final combined = <String, Set<String>>{};
     for (final pattern in patterns) {
-      final results = match(pattern, startId: startId);
+      final results = match(pattern, startId: startId, startIds: startIds);
       for (final entry in results.entries) {
         combined.putIfAbsent(entry.key, () => {}).addAll(entry.value);
       }
@@ -1093,11 +1111,15 @@ class PatternQuery<N extends Node> {
   }
 
   /// Execute multiple patterns and return path matches with edge information.
-  List<PathMatch> matchPathsMany(List<String> patterns, {String? startId}) {
+  List<PathMatch> matchPathsMany(
+    List<String> patterns, {
+    String? startId,
+    List<String>? startIds,
+  }) {
     final out = <PathMatch>[];
     final seen = <String>{};
     for (final pattern in patterns) {
-      final paths = matchPaths(pattern, startId: startId);
+      final paths = matchPaths(pattern, startId: startId, startIds: startIds);
       for (final path in paths) {
         final keys = path.nodes.keys.toList()..sort();
         final sig = keys.map((k) => '$k=${path.nodes[k]}').join('|');

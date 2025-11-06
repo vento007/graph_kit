@@ -1,3 +1,9 @@
+## 0.8.0
+
+- **Multiple start IDs support**: New `startIds` parameter for querying from multiple starting nodes
+  - `startIds: ['node1', 'node2', 'node3']` matches patterns beginning from any specified node
+  - Works with all query methods: `matchRows()`, `match()`, `matchPaths()`, `matchRowsMany()`, `matchMany()`, `matchPathsMany()`
+
 ## 0.7.9
 
 - **Fixed variable-length path queries**: Now returns complete multi-hop paths with edges

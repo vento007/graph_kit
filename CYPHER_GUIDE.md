@@ -38,45 +38,71 @@ MATCH person:Person
 # Find all nodes with variable name 'user'
 MATCH user
 
-# Find nodes by ID (when used with startId parameter)
+# Find nodes by ID (when used with startIds parameter)
 MATCH person:Person
 ```
 
-## Starting from Specific Nodes (startId)
+## Starting from Specific Nodes
 
-The `startId` parameter lets you start pattern matching from a specific node, making queries more efficient by only exploring relevant subgraphs.
+### Multiple Starting Nodes (startIds)
 
-### Basic Usage
+The `startIds` parameter lets you start pattern matching from multiple nodes simultaneously, making it perfect for search results or batch queries:
 
 ```cypher
-# Start from a specific person
-query.match('person-[:WORKS_FOR]->team', startId: 'alice')
-# Only matches paths starting from alice
+# Start from multiple people
+query.match('person-[:WORKS_FOR]->team', startIds: ['alice', 'bob', 'charlie'])
+# Matches paths from any of the specified people
 
-# Start from a specific team
-query.match('person-[:WORKS_FOR]->team', startId: 'engineering')
-# Only matches paths where team = engineering
+# Start from multiple teams
+query.match('person-[:WORKS_FOR]->team', startIds: ['engineering', 'design'])
+# Matches paths where team is engineering OR design
+
+# Search results: query all matches at once
+final searchResults = ['user1', 'user2', 'user3'];
+query.matchPaths('user->group->project', startIds: searchResults)
+# Efficient batch query for all search results
+```
+
+**Key Features:**
+- Automatically deduplicates when multiple starts find the same path
+- More efficient than multiple single queries
+- Perfect for search functionality (4 depth levels × 10 results = single query instead of 40 ORs)
+
+### Single Starting Node (startId - Deprecated)
+
+> **Note:** `startId` will be deprecated in 0.9.0 in favor of `startIds` for API consistency. Use `startIds: ['node_id']` for new code.
+
+```cypher
+# Old style (will be deprecated)
+query.match('person-[:WORKS_FOR]->team', startId: 'alice')
+
+# New style (preferred)
+query.match('person-[:WORKS_FOR]->team', startIds: ['alice'])
 ```
 
 ### Starting from Any Position
 
-**Important:** `startId` can match **any element** in the pattern, not just the first:
+**Important:** Start parameters can match **any element** in the pattern, not just the first:
 
 ```cypher
 # Pattern: a->b->c
-# startId can match 'a', 'b', OR 'c'
+# startIds can match 'a', 'b', OR 'c'
 
 # Start from first element
-query.matchPaths('person->team->project', startId: 'alice')
+query.matchPaths('person->team->project', startIds: ['alice'])
 # Matches paths where person = alice
 
 # Start from middle element
-query.matchPaths('person->team->project', startId: 'engineering')
+query.matchPaths('person->team->project', startIds: ['engineering'])
 # Matches paths where team = engineering
 
 # Start from last element
-query.matchPaths('person->team->project', startId: 'web_app')
+query.matchPaths('person->team->project', startIds: ['web_app'])
 # Matches paths where project = web_app
+
+# Multiple starts at different positions
+query.matchPaths('person->team->project', startIds: ['alice', 'engineering', 'web_app'])
+# Matches paths where ANY variable matches any of these IDs
 ```
 
 ### Performance Optimization with startType
@@ -87,14 +113,14 @@ When starting from middle or last elements, use `startType` to tell graph_kit wh
 # Without startType: checks all positions (slower)
 query.matchPaths(
   'person->team->project',
-  startId: 'engineering'
+  startIds: ['engineering']
 )
 # Checks if 'engineering' matches person, team, OR project
 
 # With startType: only checks specified type (faster!)
 query.matchPaths(
   'person->team->project',
-  startId: 'engineering',
+  startIds: ['engineering'],
   startType: 'Team'
 )
 # ONLY checks if 'engineering' matches team position
@@ -106,7 +132,7 @@ Use `startType` for better performance when:
 - Starting from middle or last elements
 - Working with long patterns (4+ elements)
 - Running performance-critical queries
-- You know the node type of your startId
+- You know the node type of your starting nodes
 
 **Example with long pattern:**
 
@@ -114,7 +140,7 @@ Use `startType` for better performance when:
 # 5-element pattern
 query.matchPaths(
   'a->b->c->d->e',
-  startId: 'node_d',
+  startIds: ['node_d'],
   startType: 'NodeTypeD'  # Skip checking a, b, c positions
 )
 ```
@@ -122,24 +148,24 @@ query.matchPaths(
 ### Common Patterns
 
 ```cypher
-# Find all projects for a team (start from middle)
+# Find all projects for multiple teams (start from middle)
 query.matchPaths(
   'person->team->project',
-  startId: 'engineering',
+  startIds: ['engineering', 'design'],
   startType: 'Team'
 )
 
-# Find all people working on a project (start from end)
+# Find all people working on multiple projects (start from end)
 query.matchPaths(
   'person->team->project',
-  startId: 'web_app',
+  startIds: ['web_app', 'mobile_app'],
   startType: 'Project'
 )
 
-# Backward traversal from specific node
+# Backward traversal from specific nodes
 query.matchPaths(
   'project<-[:ASSIGNED_TO]-team<-[:WORKS_FOR]-person',
-  startId: 'web_app'
+  startIds: ['web_app', 'mobile_app']
 )
 ```
 
