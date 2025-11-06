@@ -152,52 +152,77 @@ print(assignments); // {team: {engineering, design, marketing}, project: {web_ap
 
 ### 2.4 Queries from Specific Starting Points
 
+#### Multiple Starting Nodes (startIds)
+
+Query from multiple starting nodes simultaneously. Perfect for search results or filtering by multiple IDs:
+
 ```dart
-// What does Alice work on? query.match with startId returns Map<String, Set<String>>
+// Search returns multiple matching users - query from all of them
+final searchResults = ['alice', 'bob', 'charlie'];
+final projects = query.match(
+  'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
+  startIds: searchResults
+);
+// Returns all projects connected to any of the matched users
+
+// Query from multiple teams
+final multiTeamView = query.match(
+  'team-[:ASSIGNED_TO]->project',
+  startIds: ['engineering', 'design']
+);
+print(multiTeamView); // {team: {engineering, design}, project: {web_app, mobile_app, landing_page}}
+
+// Automatically deduplicates when multiple starts find the same path
+final paths = query.matchPaths(
+  'person-[:WORKS_FOR]->team',
+  startIds: ['alice', 'bob']  // Both in same team
+);
+// Returns unique paths (deduplicated)
+```
+
+#### Single Starting Node (startId)
+
+> **Note:** `startId` will be deprecated in 0.9.0 in favor of `startIds` for API consistency. Use `startIds: ['single_node']` for new code.
+
+```dart
+// What does Alice work on?
 final aliceWork = query.match(
   'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
-  startId: 'alice'
+  startId: 'alice'  // Deprecated: use startIds: ['alice']
 );
 print(aliceWork); // {person: {alice}, team: {engineering}, project: {web_app, mobile_app}}
 
-// What does Charlie manage? query.match with startId returns Map<String, Set<String>>
-final charlieManages = query.match(
-  'person-[:MANAGES]->team',
-  startId: 'charlie'
-);
-print(charlieManages); // {person: {charlie}, team: {engineering, design, marketing}}
-
-// Who works on the web app project? query.match with startId returns Map<String, Set<String>>
+// Who works on the web app project?
 final webAppTeam = query.match(
   'project<-[:ASSIGNED_TO]-team<-[:WORKS_FOR]-person',
-  startId: 'web_app'
+  startId: 'web_app'  // Deprecated: use startIds: ['web_app']
 );
 print(webAppTeam); // {project: {web_app}, team: {engineering}, person: {alice, bob}}
 ```
 
 #### Starting from Middle or Last Elements
 
-`startId` can match **any position** in the pattern, not just the first element:
+Start parameters can match **any position** in the pattern, not just the first element:
 
 ```dart
 // Start from middle element (team)
 final teamConnections = query.matchPaths(
   'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
-  startId: 'engineering'  // team is in the middle!
+  startIds: ['engineering']  // team is in the middle!
 );
 // Returns paths where 'team' variable = 'engineering'
 
 // Start from last element (project)
 final projectPaths = query.matchPaths(
   'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
-  startId: 'web_app'  // project is last!
+  startIds: ['web_app']  // project is last!
 );
 // Returns paths where 'project' variable = 'web_app'
 
-// Start from any element in longer chains
+// Multiple middle starts
 final middleChain = query.matchPaths(
   'a->b->c->d->e',
-  startId: 'node_c'  // Start from middle 'c' element
+  startIds: ['node_c', 'node_d']  // Start from multiple middle elements
 );
 ```
 
@@ -209,13 +234,13 @@ When starting from middle/last elements, use `startType` to skip unnecessary pos
 // Without startType: checks all 3 positions (person, team, project)
 final paths = query.matchPaths(
   'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
-  startId: 'engineering'
+  startIds: ['engineering']
 );
 
 // With startType: ONLY checks 'team' position (faster!)
 final paths = query.matchPaths(
   'person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project',
-  startId: 'engineering',
+  startIds: ['engineering'],
   startType: 'Team'  // Optimization hint
 );
 ```
@@ -224,7 +249,7 @@ final paths = query.matchPaths(
 - Starting from middle or last positions
 - Large patterns (4+ elements)
 - Performance-critical queries
-- You know the node type of your startId
+- You know the node type of your starting nodes
 
 ### 2.5 Row-wise Results - Preserve Path Relationships
 
@@ -268,7 +293,7 @@ for (final path in paths) {
 final aliceConnections = query.matchMany([
   'person-[:WORKS_FOR]->team',
   'person-[:LEADS]->project'
-], startId: 'alice');
+], startIds: ['alice']);
 print(aliceConnections); // {person: {alice}, team: {engineering}, project: {web_app}}
 
 // Combine multiple relationship types, query.matchMany returns Map<String, Set<String>>
@@ -782,7 +807,7 @@ query.match('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project')
 // Returns: {person: {alice, bob}, team: {engineering}, project: {web_app, mobile_app}}
 
 // Backwards: What teams work on this project?
-query.match('project<-[:ASSIGNED_TO]-team', startId: 'web_app')
+query.match('project<-[:ASSIGNED_TO]-team', startIds: ['web_app'])
 // Returns: {project: {web_app}, team: {engineering}}
 
 // Filter: Find specific person
@@ -866,8 +891,9 @@ The demo includes sample queries, real-time query execution, and a comprehensive
 
 ## 8. Design and performance
 
-- Traversal from a known ID (`startId`) is fast:
+- Traversal from known IDs (`startIds`) is fast:
   - Each hop uses adjacency maps; cost is proportional to the edges visited.
+  - Multiple start points are processed independently and deduplicated.
 - Seeding by type (`alias:Type`) does a one-time node scan to find initial seeds.
   - For small/medium graphs, this is effectively instant; indexing can be added later if needed.
 - `matchMany([...])` mirrors "multiple MATCH/OPTIONAL MATCH" lines in Cypher by running several independent chains from the same start and unioning results.
@@ -900,7 +926,7 @@ final restoredGraph = GraphSerializer.fromJsonString(loadedJson, Node.fromJson);
 
 // Graph is fully restored - queries work immediately
 final query = PatternQuery(restoredGraph);
-final members = query.match('team<-[:MEMBER_OF]-user', startId: 'team1');
+final members = query.match('team<-[:MEMBER_OF]-user', startIds: ['team1']);
 print(members['user']); // {alice}
 ```
 
