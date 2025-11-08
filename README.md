@@ -64,7 +64,7 @@ In-memory, typed directed multigraph with:
 
 ---
 
-## 📖 Complete Cypher Query Language Guide
+## Complete Cypher Query Language Guide
 
 **GraphKit supports a powerful subset of Cypher** - the query language used by Neo4j. For comprehensive documentation on all query features including advanced WHERE clauses, edge variable comparison, logical operators, and complex filtering:
 
