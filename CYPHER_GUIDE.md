@@ -15,6 +15,7 @@ GraphKit implements a powerful subset of the Cypher query language for graph pat
 - [Logical Operators](#logical-operators)
 - [Parentheses and Precedence](#parentheses-and-precedence)
 - [Property Comparisons](#property-comparisons)
+- [Edge Variable Comparison](#edge-variable-comparison)
 - [RETURN Clause - Property Projection](#return-clause---property-projection)
 - [Advanced Examples](#advanced-examples)
 
@@ -485,6 +486,252 @@ MATCH person:Person WHERE person.name CONTAINS "john"  # matches "John", "Johnny
 # CONTAINS works with direct properties (id, type, label) and custom properties
 MATCH node:Asset WHERE node.label CONTAINS "server" OR node.hostname CONTAINS "prod"
 ```
+
+## Edge Variable Comparison
+
+Edge variable comparison allows you to enforce edge type consistency across multi-hop paths by comparing edge variables directly. This is essential for maintaining type integrity in routing patterns, workflow chains, and transaction sequences.
+
+### Basic Syntax
+
+```cypher
+# Enforce same edge type across two hops
+MATCH a-[r]->b-[r2]->c WHERE type(r2) = type(r)
+
+# Ensure different edge types
+MATCH a-[r]->b-[r2]->c WHERE type(r2) != type(r)
+
+# Combine with prefix filtering (most common pattern)
+MATCH a-[r]->b-[r2]->c WHERE type(r) STARTS WITH "PREFIX_" AND type(r2) = type(r)
+
+# Three-hop consistency
+MATCH a-[r]->b-[r2]->c-[r3]->d
+WHERE type(r) STARTS WITH "CATEGORY_"
+  AND type(r2) = type(r)
+  AND type(r3) = type(r)
+```
+
+### Simple Example
+
+```cypher
+# Graph has routes with different identifiers
+# node1 -[ROUTE_A]-> hub -[ROUTE_A]-> target1
+# node1 -[ROUTE_A]-> hub -[ROUTE_B]-> target2
+
+# WITHOUT edge variable comparison - returns all routes
+MATCH source-[r]->hub-[r2]->target
+WHERE type(r) STARTS WITH "ROUTE_"
+# Returns: target1, target2 (both routes, regardless of consistency)
+
+# WITH edge variable comparison - only consistent routes
+MATCH source-[r]->hub-[r2]->target
+WHERE type(r) STARTS WITH "ROUTE_" AND type(r2) = type(r)
+# Returns: target1 (only where r and r2 are both ROUTE_A)
+```
+
+### Why Use Edge Variable Comparison?
+
+Without edge variable comparison, multi-hop queries can return **incorrect paths** that mix edge types from different contexts:
+
+```cypher
+# PROBLEM: Without type consistency check
+MATCH policy-[r]->relay-[r2]->destination
+WHERE type(r) STARTS WITH "DIRECT_"
+
+# This matches ALL paths where:
+# - r is any DIRECT_* edge (e.g., DIRECT_policy1)
+# - r2 is any DIRECT_* edge (e.g., DIRECT_policy2)
+# Result: Paths that MIX different policy contexts!
+```
+
+With edge variable comparison:
+
+```cypher
+# SOLUTION: Enforce type consistency
+MATCH policy-[r]->relay-[r2]->destination
+WHERE type(r) STARTS WITH "DIRECT_" AND type(r2) = type(r)
+
+# This matches ONLY paths where:
+# - r is any DIRECT_* edge (e.g., DIRECT_policy1)
+# - r2 is THE SAME edge type (must be DIRECT_policy1)
+# Result: Only paths within the same policy context!
+```
+
+### Common Use Cases
+
+#### 1. Workflow Approval Chains
+
+Ensure multi-hop approval paths maintain the same approval type:
+
+```cypher
+# Request -> Approver -> Final Approver (same approval level throughout)
+MATCH request:Request-[r]->approver:Person-[r2]->final:Person
+WHERE type(r) STARTS WITH "REQUIRES_APPROVAL_" AND type(r2) = type(r)
+
+# This ensures the entire approval chain uses the same approval level
+# preventing mixing of different approval types (e.g., technical vs financial)
+```
+
+#### 2. Transaction Chains
+
+Maintain transaction type consistency across hops:
+
+```cypher
+# Account -> Intermediate -> Account (same transaction type)
+MATCH source:Account-[r]->intermediate-[r2]->target:Account
+WHERE type(r) STARTS WITH "TRANSACTION_" AND type(r2) = type(r)
+
+# Ensures transaction chains don't mix different transaction types
+```
+
+#### 3. Virtual Network Paths
+
+Enforce VLAN or network segment consistency:
+
+```cypher
+# Host -> Switch -> Host (same VLAN)
+MATCH host1-[r]->switch-[r2]->host2
+WHERE type(r) STARTS WITH "VLAN_" AND type(r2) = type(r)
+
+# Ensures packets stay within the same virtual network
+```
+
+#### 4. Access Control Chains
+
+Verify permission inheritance consistency:
+
+```cypher
+# User -> Group -> Resource (same permission type)
+MATCH user-[r]->group-[r2]->resource
+WHERE type(r) STARTS WITH "HAS_PERMISSION_" AND type(r2) = type(r)
+
+# Ensures permission chains maintain the same access level
+```
+
+### Three-Hop Consistency
+
+Extend edge type consistency across multiple hops:
+
+```cypher
+# All three edges must have the same type
+MATCH a-[r]->b-[r2]->c-[r3]->d
+WHERE type(r) STARTS WITH "PREFIX_"
+  AND type(r2) = type(r)
+  AND type(r3) = type(r)
+
+# Example: Policy drill-down with 3 levels
+MATCH policy-[r]->relay1-[r2]->relay2-[r3]->destination
+WHERE type(r) STARTS WITH "VIRTUAL_"
+  AND type(r2) = type(r)
+  AND type(r3) = type(r)
+```
+
+### Inequality Comparisons
+
+Find paths where edge types differ (useful for detecting transitions):
+
+```cypher
+# Find points where edge type changes
+MATCH a-[r]->b-[r2]->c WHERE type(r2) != type(r)
+
+# Example: Detect policy transitions
+MATCH source-[r]->intermediate-[r2]->target
+WHERE type(r) STARTS WITH "DIRECT_"
+  AND type(r2) STARTS WITH "DIRECT_"
+  AND type(r2) != type(r)
+# Returns paths where policy context changes
+```
+
+### Combining with OR Conditions
+
+Use edge variable comparison with complex logical expressions:
+
+```cypher
+# Multiple allowed policy types, but must be consistent
+MATCH policy-[r]->relay-[r2]->destination
+WHERE (type(r) = "DIRECT_policy1" OR type(r) = "DIRECT_policy2")
+  AND type(r2) = type(r)
+
+# Edge type must match AND one of several start types
+MATCH source-[r]->hub-[r2]->target
+WHERE type(r) STARTS WITH "ROUTE_"
+  AND type(r2) = type(r)
+  AND (source.category = "A" OR source.category = "B")
+```
+
+### Performance Considerations
+
+Edge variable comparison is efficient because:
+- Comparison happens after edge type is already bound during traversal
+- No additional graph lookups required
+- Simply compares two string values from the current row
+
+```cypher
+# Efficient: Filter during traversal
+WHERE type(r) STARTS WITH "DIRECT_" AND type(r2) = type(r)
+
+# Less efficient: Post-process after collecting all paths
+WHERE type(r) STARTS WITH "DIRECT_"
+# Then manually filter results in application code
+```
+
+### Edge Variable Comparison with matchPaths()
+
+Works seamlessly with `matchPaths()` to get complete path information:
+
+```cypher
+final paths = query.matchPaths(
+  'source-[r]->hub-[r2]->destination WHERE type(r2) = type(r)',
+  startId: 'source1'
+);
+
+for (final path in paths) {
+  print('Edge 1: ${path.edges[0].type}');  // e.g., "ROUTE_abc"
+  print('Edge 2: ${path.edges[1].type}');  // e.g., "ROUTE_abc" (same!)
+  assert(path.edges[0].type == path.edges[1].type);  // Always true
+}
+```
+
+### Real-World Example
+
+Complete example showing the difference:
+
+```dart
+// Setup: Hub with edges from different sources
+graph.addNode(Node(id: 'source1', type: 'Source', label: 'Source1'));
+graph.addNode(Node(id: 'hub', type: 'Hub', label: 'Hub1'));
+graph.addNode(Node(id: 'target1', type: 'Target', label: 'Target1'));
+graph.addNode(Node(id: 'target2', type: 'Target', label: 'Target2'));
+
+graph.addEdge('source1', 'PREFIX_abc', 'hub');
+graph.addEdge('hub', 'PREFIX_abc', 'target1');  // Same type
+graph.addEdge('hub', 'PREFIX_xyz', 'target2');  // Different type
+
+// WITHOUT edge variable comparison - returns both targets
+final without = query.match(
+  'source-[r]->hub-[r2]->target WHERE type(r) STARTS WITH "PREFIX_"'
+);
+print(without['target']);  // {target1, target2}
+
+// WITH edge variable comparison - returns only consistent path
+final with = query.match(
+  'source-[r]->hub-[r2]->target WHERE type(r) STARTS WITH "PREFIX_" AND type(r2) = type(r)'
+);
+print(with['target']);  // {target1}
+```
+
+### Summary
+
+Edge variable comparison is essential for:
+- **Multi-hop path consistency** - Enforce same edge type across hops
+- **Policy integrity** - Prevent cross-policy path contamination
+- **Transaction chains** - Maintain transaction type throughout
+- **Access control** - Verify permission inheritance consistency
+- **Network segmentation** - Enforce VLAN/segment boundaries
+
+**Syntax:**
+- `WHERE type(r2) = type(r)` - Edge types must match
+- `WHERE type(r2) != type(r)` - Edge types must differ
+- Combine with `STARTS WITH`, `OR`, `AND` for complex filtering
 
 ## RETURN Clause - Property Projection
 

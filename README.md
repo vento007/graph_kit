@@ -41,7 +41,7 @@ In-memory, typed directed multigraph with:
 - **Typed nodes** (e.g., `Person`, `Team`, `Project`, `Resource`)
 - **Typed edges** (e.g., `WORKS_FOR`, `MANAGES`, `ASSIGNED_TO`, `DEPENDS_ON`)
 - **Multiple relationships** between the same nodes
-- **Advanced Cypher queries** with WHERE clauses, RETURN projection, logical operators, and variable-length paths
+- **Advanced Cypher queries** with WHERE clauses, RETURN projection, logical operators, variable-length paths, and edge variable comparison
 - **Complete path results** with Neo4j-style edge information
 - **Graph algorithms** for analysis (shortest path, connected components, topological sort, reachability)
 
@@ -62,6 +62,23 @@ In-memory, typed directed multigraph with:
 - [11. Examples index](#11-examples-index)
 - [License](#license)
 
+---
+
+## 📖 Complete Cypher Query Language Guide
+
+**GraphKit supports a powerful subset of Cypher** - the query language used by Neo4j. For comprehensive documentation on all query features including advanced WHERE clauses, edge variable comparison, logical operators, and complex filtering:
+
+### **[Read the Complete Cypher Guide](https://github.com/vento007/graph_kit/blob/main/CYPHER_GUIDE.md)**
+
+The guide covers:
+- **Edge Variable Comparison** - `WHERE type(r2) = type(r)` for multi-hop path consistency
+- **Complex WHERE Clauses** - Parentheses, logical operators, property filtering
+- **Variable-Length Paths** - `[:TYPE*1..3]` for flexible hop ranges
+- **Multiple Edge Types** - `[:TYPE1|TYPE2]` for OR matching
+- **RETURN Projection** - Property access with AS aliases
+- **Real-World Examples** - HR queries, project management, organizational analysis
+
+---
 
 ## 1. Quick Preview
 
@@ -341,6 +358,28 @@ print(youngOrWellPaid); // [{person: alice}, {person: bob}]
 // Complex filtering with relationships - query.matchRows returns List<Map<String, String>>
 final seniorWorkers = query.matchRows('MATCH person:Person-[:WORKS_FOR]->team:Team WHERE person.age > 30');
 print(seniorWorkers); // [{person: bob, team: engineering}]
+
+// Edge variable comparison for multi-hop path consistency
+// Add nodes with edge type prefixes
+graph.addNode(Node(id: 'hub', type: 'Hub', label: 'Hub1'));
+graph.addNode(Node(id: 'dest1', type: 'Dest', label: 'Dest1'));
+graph.addNode(Node(id: 'dest2', type: 'Dest', label: 'Dest2'));
+graph.addEdge('alice', 'ROUTE_alice', 'hub');
+graph.addEdge('hub', 'ROUTE_alice', 'dest1'); // Same type as alice's edge
+graph.addEdge('hub', 'ROUTE_bob', 'dest2');   // Different type
+
+// Enforce same edge type across both hops - query.match returns Map<String, Set<String>>
+final consistentPaths = query.match(
+  'person-[r]->hub-[r2]->dest WHERE type(r) STARTS WITH "ROUTE_" AND type(r2) = type(r)'
+);
+print(consistentPaths); // {person: {alice}, hub: {hub}, dest: {dest1}}
+// Only dest1 is returned because its edge type (ROUTE_alice) matches alice's edge type
+
+// Find paths with DIFFERENT edge types - query.match returns Map<String, Set<String>>
+final mixedPaths = query.match(
+  'person-[r]->hub-[r2]->dest WHERE type(r2) != type(r)'
+);
+print(mixedPaths); // {person: {alice}, hub: {hub}, dest: {dest2}}
 ```
 
 ### 2.9 RETURN Clause - Property Projection

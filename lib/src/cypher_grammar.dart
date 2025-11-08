@@ -27,11 +27,20 @@ class CypherPatternGrammar extends GrammarDefinition {
 
   Parser connection() => ref0(forwardArrow) | ref0(backwardArrow);
 
-  Parser forwardArrow() => (string('->') | (char('-') & ref0(edgeType) & string('->')));
+  Parser forwardArrow() => (string('->') | (char('-') & ref0(edgeSpec) & string('->')));
 
-  Parser backwardArrow() => ((string('<-') & ref0(edgeType) & char('-')) | string('<-'));
+  Parser backwardArrow() => ((string('<-') & ref0(edgeSpec) & char('-')) | string('<-'));
 
-  Parser edgeType() => char('[') & whitespace().star() & char(':') & whitespace().star() & ref0(edgeTypeList) & whitespace().star() & ref0(variableLengthModifier).optional() & whitespace().star() & char(']');
+  Parser edgeSpec() =>
+    char('[') &
+    whitespace().star() &
+    ref0(variable).optional() &
+    whitespace().star() &
+    (char(':') & whitespace().star() & ref0(edgeTypeList)).optional() &
+    whitespace().star() &
+    ref0(variableLengthModifier).optional() &
+    whitespace().star() &
+    char(']');
 
   Parser edgeTypeList() => ref0(variable) & (char('|') & ref0(variable)).star();
 
@@ -70,11 +79,20 @@ class CypherPatternGrammar extends GrammarDefinition {
     whitespace().star() &
     ref0(value);
 
-  Parser propertyExpression() => ref0(variable) & char('.') & ref0(variable);
+  Parser propertyExpression() => ref0(functionExpression) | (ref0(variable) & char('.') & ref0(variable));
 
-  Parser comparisonOperator() => string('CONTAINS') | string('>=') | string('<=') | string('!=') | char('>') | char('<') | char('=');
+  Parser functionExpression() =>
+    string('type') &
+    whitespace().star() &
+    char('(') &
+    whitespace().star() &
+    ref0(variable) &
+    whitespace().star() &
+    char(')');
 
-  Parser value() => ref0(stringLiteral) | ref0(numberLiteral) | ref0(booleanLiteral);
+  Parser comparisonOperator() => string('STARTS WITH') | string('CONTAINS') | string('>=') | string('<=') | string('!=') | char('>') | char('<') | char('=');
+
+  Parser value() => ref0(functionExpression) | ref0(stringLiteral) | ref0(numberLiteral) | ref0(booleanLiteral);
 
   Parser stringLiteral() => char('"') & (char('"').neg()).star() & char('"');
 
