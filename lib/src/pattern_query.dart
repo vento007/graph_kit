@@ -33,6 +33,7 @@ class PatternQuery<N extends Node> {
     // Extract pattern, WHERE clause, and RETURN clause from parse tree
     final parts = <String>[];
     final directions = <bool>[];
+    final edgeVars = <String?>[]; // Track edge variables from pattern
     dynamic whereClause;
     List<ReturnItem>? returnItems;
 
@@ -59,7 +60,7 @@ class PatternQuery<N extends Node> {
 
       if (patternWithWhere is List && patternWithWhere.isNotEmpty) {
         // Extract pattern (first element)
-        _extractPartsFromParseTree(patternWithWhere[0], parts, directions);
+        _extractPartsFromParseTree(patternWithWhere[0], parts, directions, edgeVars);
 
         // Extract WHERE clause if present (second element is [whitespace, WHERE_clause])
         if (patternWithWhere.length > 1 && patternWithWhere[1] != null && patternWithWhere[1] is List) {
@@ -126,7 +127,7 @@ class PatternQuery<N extends Node> {
           final seedRows = <Map<String, String>>[{alias: singleStartId}];
 
           // Execute from this position
-          final results = _executeFromPosition(seedRows, parts, directions, i);
+          final results = _executeFromPosition(seedRows, parts, directions, edgeVars, i);
           allRows.addAll(results);
         }
       }
@@ -159,9 +160,10 @@ class PatternQuery<N extends Node> {
         final isForward = directions[i];
         final edgePart = isForward ? part : parts[i + 1];
         final edgeTypes = _edgeTypeFrom(edgePart);
-        if (edgeTypes == null || edgeTypes.isEmpty) {
+        if (edgeTypes == null) {
           return const <Map<String, dynamic>>[];
         }
+        // Note: empty list [] means wildcard (match all types)
 
         // Check if this is a variable-length relationship
         final variableLengthSpec = _extractVariableLengthSpec(edgePart);
@@ -173,8 +175,9 @@ class PatternQuery<N extends Node> {
           currentRows = vlResults;
         } else {
           // Handle single-hop relationship (existing logic)
+          final edgeVar = edgeVars[i];
           currentRows = _executeSingleHopSegment(
-            currentRows, aliasHere, nextAlias, edgeTypes, isForward
+            currentRows, aliasHere, nextAlias, edgeTypes, isForward, edgeVar
           );
         }
 
@@ -202,6 +205,7 @@ class PatternQuery<N extends Node> {
     List<Map<String, String>> seedRows,
     List<String> parts,
     List<bool> directions,
+    List<String?> edgeVars,
     int startIndex,
   ) {
     var currentRows = seedRows;
@@ -216,9 +220,10 @@ class PatternQuery<N extends Node> {
       final edgePart = isForwardInPattern ? parts[i] : parts[i + 1];
       final edgeTypes = _edgeTypeFrom(edgePart);
 
-      if (edgeTypes == null || edgeTypes.isEmpty) {
+      if (edgeTypes == null) {
         return const <Map<String, String>>[];
       }
+      // Note: empty list [] means wildcard (match all types)
 
       // Reverse direction when going backward
       final isForward = !isForwardInPattern;
@@ -230,8 +235,9 @@ class PatternQuery<N extends Node> {
           currentRows, aliasHere, nextAlias, edgeTypes, variableLengthSpec, isForward
         );
       } else {
+        final edgeVar = edgeVars[i];
         currentRows = _executeSingleHopSegment(
-          currentRows, aliasHere, nextAlias, edgeTypes, isForward
+          currentRows, aliasHere, nextAlias, edgeTypes, isForward, edgeVar
         );
       }
 
@@ -247,9 +253,10 @@ class PatternQuery<N extends Node> {
       final edgePart = isForward ? parts[i] : parts[i + 1];
       final edgeTypes = _edgeTypeFrom(edgePart);
 
-      if (edgeTypes == null || edgeTypes.isEmpty) {
+      if (edgeTypes == null) {
         return const <Map<String, String>>[];
       }
+      // Note: empty list [] means wildcard (match all types)
 
       // Check for variable-length
       final variableLengthSpec = _extractVariableLengthSpec(edgePart);
@@ -258,8 +265,9 @@ class PatternQuery<N extends Node> {
           currentRows, aliasHere, nextAlias, edgeTypes, variableLengthSpec, isForward
         );
       } else {
+        final edgeVar = edgeVars[i];
         currentRows = _executeSingleHopSegment(
-          currentRows, aliasHere, nextAlias, edgeTypes, isForward
+          currentRows, aliasHere, nextAlias, edgeTypes, isForward, edgeVar
         );
       }
 
@@ -277,6 +285,7 @@ class PatternQuery<N extends Node> {
     String nextAlias,
     List<String> edgeTypes,
     bool isForward,
+    String? edgeVar,
   ) {
     final nextRows = <Map<String, String>>[];
     final seen = <String>{};
@@ -285,22 +294,55 @@ class PatternQuery<N extends Node> {
       final srcId = row[aliasHere];
       if (srcId == null) continue;
 
-      // Collect neighbors matching ANY of the edge types (OR logic)
-      final allNeighbors = <String>{};
-      for (final edgeType in edgeTypes) {
-        final neighbors = isForward
-            ? graph.outNeighbors(srcId, edgeType)
-            : graph.inNeighbors(srcId, edgeType);
-        allNeighbors.addAll(neighbors);
+      // Handle wildcard case: empty edgeTypes list means match all types
+      List<String> effectiveEdgeTypes = edgeTypes;
+      if (edgeTypes.isEmpty) {
+        // Get all available edge types for this node
+        final adjacency = isForward ? graph.out[srcId] : graph.inn[srcId];
+        if (adjacency != null) {
+          effectiveEdgeTypes = adjacency.keys.toList();
+        } else {
+          effectiveEdgeTypes = [];
+        }
       }
 
-      for (final nb in allNeighbors) {
-        final newRow = Map<String, String>.from(row);
-        newRow[nextAlias] = nb;
-        final keys = newRow.keys.toList()..sort();
-        final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
-        if (seen.add(sig)) {
-          nextRows.add(newRow);
+      // Collect neighbors with their edge types
+      // If edgeVar is provided, we need to track which edge type was used
+      if (edgeVar != null) {
+        for (final edgeType in effectiveEdgeTypes) {
+          final neighbors = isForward
+              ? graph.outNeighbors(srcId, edgeType)
+              : graph.inNeighbors(srcId, edgeType);
+
+          for (final nb in neighbors) {
+            final newRow = Map<String, String>.from(row);
+            newRow[nextAlias] = nb;
+            newRow[edgeVar] = edgeType; // Bind edge variable to actual edge type
+            final keys = newRow.keys.toList()..sort();
+            final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
+            if (seen.add(sig)) {
+              nextRows.add(newRow);
+            }
+          }
+        }
+      } else {
+        // Original logic when no edge variable (for backward compatibility)
+        final allNeighbors = <String>{};
+        for (final edgeType in effectiveEdgeTypes) {
+          final neighbors = isForward
+              ? graph.outNeighbors(srcId, edgeType)
+              : graph.inNeighbors(srcId, edgeType);
+          allNeighbors.addAll(neighbors);
+        }
+
+        for (final nb in allNeighbors) {
+          final newRow = Map<String, String>.from(row);
+          newRow[nextAlias] = nb;
+          final keys = newRow.keys.toList()..sort();
+          final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
+          if (seen.add(sig)) {
+            nextRows.add(newRow);
+          }
         }
       }
     }
@@ -411,12 +453,32 @@ class PatternQuery<N extends Node> {
       final rows = matchRows(pattern, startId: startId, startIds: startIds, startType: startType);
       final pathMatches = <PathMatch>[];
 
+      // Strip WHERE clause for path reconstruction
+      final patternWithoutWhere = pattern.replaceAll(RegExp(r'\s+WHERE\s+.+$', caseSensitive: false), '');
+
+      // Extract edge variables from the pattern to filter them out of nodes
+      final edgeVarNames = _extractEdgeVariableNames(patternWithoutWhere);
+
       for (final row in rows) {
-        final nodeIds = <String, String>{};
+        // Keep full row for path reconstruction (needs edge variables for lookups)
+        final fullRow = <String, String>{};
         for (final entry in row.entries) {
-          if (entry.value is String) nodeIds[entry.key] = entry.value as String;
+          if (entry.value is String) {
+            fullRow[entry.key] = entry.value as String;
+          }
         }
-        final sequences = _buildPathEdgeSequencesForRow(pattern, nodeIds);
+
+        // Build sequences using full row
+        final sequences = _buildPathEdgeSequencesForRow(patternWithoutWhere, fullRow);
+
+        // Filter out edge variables when creating PathMatch nodes
+        final nodeIds = <String, String>{};
+        for (final entry in fullRow.entries) {
+          if (!edgeVarNames.contains(entry.key)) {
+            nodeIds[entry.key] = entry.value;
+          }
+        }
+
         for (final edges in sequences) {
           pathMatches.add(PathMatch(nodes: Map<String, String>.from(nodeIds), edges: edges));
         }
@@ -428,20 +490,39 @@ class PatternQuery<N extends Node> {
     final patternWithoutReturn = pattern.replaceAll(RegExp(r'\s+RETURN\s+.+$', caseSensitive: false), '');
     final unfilteredRows = matchRows(patternWithoutReturn, startId: startId, startIds: startIds);
 
+    // Extract edge variables to filter them out
+    final patternWithoutReturnOrWhere = patternWithoutReturn.replaceAll(RegExp(r'\s+WHERE\s+.+$', caseSensitive: false), '');
+    final edgeVarNames = _extractEdgeVariableNames(patternWithoutReturnOrWhere);
+
     final pathMatches = <PathMatch>[];
 
     for (var i = 0; i < filteredRows.length && i < unfilteredRows.length; i++) {
-      final filteredIds = <String, String>{};
+      // Keep full rows for path reconstruction
+      final filteredFullRow = <String, String>{};
       for (final entry in filteredRows[i].entries) {
-        if (entry.value is String) filteredIds[entry.key] = entry.value as String;
+        if (entry.value is String) {
+          filteredFullRow[entry.key] = entry.value as String;
+        }
       }
 
-      final unfilteredIds = <String, String>{};
+      final unfilteredFullRow = <String, String>{};
       for (final entry in unfilteredRows[i].entries) {
-        if (entry.value is String) unfilteredIds[entry.key] = entry.value as String;
+        if (entry.value is String) {
+          unfilteredFullRow[entry.key] = entry.value as String;
+        }
       }
 
-      final sequences = _buildPathEdgeSequencesForRow(patternWithoutReturn, unfilteredIds);
+      // Build sequences using full row
+      final sequences = _buildPathEdgeSequencesForRow(patternWithoutReturnOrWhere, unfilteredFullRow);
+
+      // Filter out edge variables when creating PathMatch nodes
+      final filteredIds = <String, String>{};
+      for (final entry in filteredFullRow.entries) {
+        if (!edgeVarNames.contains(entry.key)) {
+          filteredIds[entry.key] = entry.value;
+        }
+      }
+
       for (final edges in sequences) {
         pathMatches.add(PathMatch(nodes: Map<String, String>.from(filteredIds), edges: edges));
       }
@@ -452,10 +533,11 @@ class PatternQuery<N extends Node> {
 
   // Extract segments and directions from parse tree (visible for testing)
   void extractPartsFromParseTreeForTesting(dynamic parseTree, List<String> parts, List<bool> directions) {
-    _extractPartsFromParseTree(parseTree, parts, directions);
+    final edgeVars = <String?>[];
+    _extractPartsFromParseTree(parseTree, parts, directions, edgeVars);
   }
 
-  void _extractPartsFromParseTree(dynamic parseTree, List<String> parts, List<bool> directions) {
+  void _extractPartsFromParseTree(dynamic parseTree, List<String> parts, List<bool> directions, List<String?> edgeVars) {
     if (parseTree is! List) return;
 
     // First element is the initial segment
@@ -473,6 +555,10 @@ class PatternQuery<N extends Node> {
           // Determine direction from connection
           final connectionStr = _flattenConnection(connection);
           directions.add(connectionStr.contains('->'));
+
+          // Extract edge variable if present
+          final edgeVar = _extractEdgeVariable(connection);
+          edgeVars.add(edgeVar);
 
           // Add edge info to the appropriate part based on direction
           final edgeInfo = _extractEdgeFromConnection(connection);
@@ -513,6 +599,37 @@ class PatternQuery<N extends Node> {
     // Extract edge type like [:WORKS_FOR] or [:WORKS_FOR*1..3] from connection
     final match = RegExp(r'\[([^\]]+)\]').firstMatch(connectionStr);
     return match != null ? '${match.group(0)}' : '';
+  }
+
+  /// Extracts edge variable name from connection like [r] or [r:TYPE]
+  String? _extractEdgeVariable(dynamic connection) {
+    final connectionStr = _flattenToString(connection);
+    // Match patterns like [r], [r:TYPE], [r:TYPE*1..3]
+    // We want to capture just the variable name before : or ]
+    final match = RegExp(r'\[(\w+)(?:[:\]]|$)').firstMatch(connectionStr);
+    return match?.group(1);
+  }
+
+  /// Extracts edge variable name from a string segment like "n[r:TYPE]"
+  String? _extractEdgeVariableFromString(String segment) {
+    // Match patterns like [r], [r:TYPE], [r:TYPE*1..3]
+    // We want to capture just the variable name before : or ]
+    final match = RegExp(r'\[(\w+)(?:[:\]]|$)').firstMatch(segment);
+    return match?.group(1);
+  }
+
+  /// Extracts all edge variable names from a pattern string
+  Set<String> _extractEdgeVariableNames(String pattern) {
+    final edgeVarNames = <String>{};
+    // Match patterns like -[r]-> or -[r:TYPE]-> or -[r:TYPE*1..3]->
+    final matches = RegExp(r'-\[(\w+)(?:[:\]]|->)').allMatches(pattern);
+    for (final match in matches) {
+      final varName = match.group(1);
+      if (varName != null) {
+        edgeVarNames.add(varName);
+      }
+    }
+    return edgeVarNames;
   }
 
   /// Extracts variable-length specification from edge string
@@ -647,7 +764,10 @@ class PatternQuery<N extends Node> {
             j++;
             break;
           }
-          if (c == ']') break;
+          if (c == ']') {
+            // Found [variable] or [] without type - this is a wildcard
+            return [];  // Empty list signals wildcard (match all types)
+          }
           j++;
         }
         if (!foundColon) continue;
@@ -750,7 +870,15 @@ class PatternQuery<N extends Node> {
 
       // Extract edge types from the appropriate part (backward uses toPart)
       final edgePart = isForward ? fromPart : toPart;
-      final edgeTypes = _edgeTypeFrom(edgePart);
+      var edgeTypes = _edgeTypeFrom(edgePart);
+      // If no explicit types (e.g., [r]), try to use the bound edge variable from row
+      if (edgeTypes == null || edgeTypes.isEmpty) {
+        final edgeVar = _extractEdgeVariableFromString(edgePart);
+        final boundType = edgeVar != null ? row[edgeVar] : null;
+        if (boundType != null && boundType.isNotEmpty) {
+          edgeTypes = [boundType];
+        }
+      }
       if (edgeTypes == null || edgeTypes.isEmpty) continue;
 
       // Determine which edge type actually exists between these nodes
@@ -855,7 +983,15 @@ class PatternQuery<N extends Node> {
       if (!row.containsKey(fromVar) || !row.containsKey(toVar)) return const <List<PathEdge>>[];
 
       final edgePart = isForward ? fromPart : toPart;
-      final edgeTypes = _edgeTypeFrom(edgePart);
+      var edgeTypes = _edgeTypeFrom(edgePart);
+      // If no explicit types (e.g., [r]), try to use the bound edge variable from row
+      if (edgeTypes == null || edgeTypes.isEmpty) {
+        final edgeVar = _extractEdgeVariableFromString(edgePart);
+        final boundType = edgeVar != null ? row[edgeVar] : null;
+        if (boundType != null && boundType.isNotEmpty) {
+          edgeTypes = [boundType];
+        }
+      }
       if (edgeTypes == null || edgeTypes.isEmpty) return const <List<PathEdge>>[];
 
       final vlSpec = _extractVariableLengthSpec(edgePart);
@@ -986,8 +1122,9 @@ class PatternQuery<N extends Node> {
 
     // Remove edge syntax if present in the middle or end
     // (applies to both branches - parts may have multiple edge specs)
-    // Updated regex to handle multiple types with | separator and variable-length *
-    part = part.replaceAll(RegExp(r'\[\s*:[^\]]*\]'), '').trim();
+    // Updated regex to handle multiple types with | separator, variable-length *, and edge variables
+    // Matches [:TYPE], [r:TYPE], [r], etc.
+    part = part.replaceAll(RegExp(r'\[\s*\w*\s*:?[^\]]*\]'), '').trim();
     // Remove trailing dash that might be left after edge removal
     part = part.replaceAll(RegExp(r'-+$'), '').trim();
 
@@ -1007,8 +1144,6 @@ class PatternQuery<N extends Node> {
     final varName = part.substring(0, endIdx).trim();
     return varName.isEmpty ? null : varName;
   }
-
-  // --- Utility finder methods (copied from original) ---
 
   /// Finds all node IDs with the given [type].
   Set<String> findByType(String type) {
@@ -1355,7 +1490,7 @@ class PatternQuery<N extends Node> {
   bool _evaluateComparisonExpression(Map<String, String> row, dynamic expr) {
     if (expr is! List || expr.length != 5) return false;
 
-    // Extract property expression (e.g., "person.age")
+    // Extract property expression (e.g., "person.age" or "type(r)")
     final propertyExpr = expr[0];
     final operator = expr[2];
     final valueExpr = expr[4];
@@ -1364,7 +1499,32 @@ class PatternQuery<N extends Node> {
     final operatorStr = _flattenToString(operator);
     final valueStr = _flattenToString(valueExpr);
 
-    // Parse property.field
+    // Check for type(variable) function call on LEFT side
+    final typeFuncMatch = RegExp(r'type\s*\(\s*(\w+)\s*\)').firstMatch(propertyStr);
+    if (typeFuncMatch != null) {
+      // This is a type(r) function - get the edge type from the row
+      final variable = typeFuncMatch.group(1)!;
+      final propValue = row[variable];
+      if (propValue == null) return false; // Variable doesn't exist in row
+
+      // Check if RIGHT side is ALSO a type(variable) function (variable-to-variable comparison)
+      final rightTypeFuncMatch = RegExp(r'type\s*\(\s*(\w+)\s*\)').firstMatch(valueStr);
+      if (rightTypeFuncMatch != null) {
+        // Variable-to-variable comparison: type(r2) = type(r)
+        final rightVariable = rightTypeFuncMatch.group(1)!;
+        final rightValue = row[rightVariable];
+        if (rightValue == null) return false; // Right variable doesn't exist in row
+
+        // Compare the two edge types
+        return _compareValues(propValue, operatorStr, rightValue);
+      }
+
+      // Right side is a literal value
+      final comparisonValue = _parseValue(valueStr);
+      return _compareValues(propValue, operatorStr, comparisonValue);
+    }
+
+    // Parse property.field for node properties
     final propMatch = RegExp(r'(\w+)\.(\w+)').firstMatch(propertyStr);
     if (propMatch == null) return false; // Invalid property syntax should fail
 
@@ -1456,6 +1616,7 @@ class PatternQuery<N extends Node> {
         case '=': return propStr == compStr;
         case '!=': return propStr != compStr;
         case 'CONTAINS': return propStr.toLowerCase().contains(compStr.toLowerCase());
+        case 'STARTS WITH': return propStr.startsWith(compStr);
         default: return false; // Other operators not supported for strings
       }
     } catch (e) {
