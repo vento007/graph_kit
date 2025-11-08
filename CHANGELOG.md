@@ -1,3 +1,9 @@
+## 0.8.1
+
+- **Edge variable-to-variable comparison in WHERE clauses**: Compare edge variables directly for multi-hop path consistency
+  - `WHERE type(r2) = type(r)` - Enforce same edge type across hops
+  - `WHERE type(r2) != type(r)` - Find paths with different edge types
+
 ## 0.8.0
 
 - **Multiple start IDs support**: New `startIds` parameter for querying from multiple starting nodes
