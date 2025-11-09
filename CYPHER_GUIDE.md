@@ -181,18 +181,21 @@ MATCH team:Team           # Find Team nodes
 MATCH project:Project     # Find Project nodes
 ```
 
-### Label Filtering
-Filter nodes by their label property using `{label=value}` or `{label~value}` syntax:
+### Inline Property Filtering
+Attach a property map to any node using `{property=value}` (or `{property:value}`) for exact matches, or `{property~value}` for case-insensitive substring checks. This works for built-in fields (`label`, `id`, `type`) and any entry inside `Node.properties`.
 
 ```cypher
 # Exact label match
 MATCH person:Person{label=Alice}
 
-# Partial label match (contains)
+# Custom property equality
+MATCH source:Source{sourceKind:"user"}
+
+# Partial match on any string property
 MATCH person:Person{label~Cooper}
 
-# Complex label with spaces
-MATCH person:Person{label=Alice Cooper}
+# Property values with spaces (quotes optional for compatibility)
+MATCH asset:Asset{region:"us west"}
 ```
 
 ## Relationships and Edges
