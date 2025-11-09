@@ -1,3 +1,9 @@
+## 0.8.2
+
+- **Inline node property filters**: Node segments now accept property maps such as `group:Source{sourceKind:"asset", region~"west"}-[:HAS_POLICY]->policy:Policy`, covering built-ins (`id`, `label`, `type`) and any `Node.properties`.
+  - Works with multi-hop, mixed-direction, variable-length, and `startId` queries without extra `WHERE` clauses.
+  - Documented in `CYPHER_GUIDE.md` and guarded by `test/property_filter_test.dart` cases (equality, contains, multi-constraint).
+ 
 ## 0.8.1
 
 - **Edge variable-to-variable comparison in WHERE clauses**: Compare edge variables directly for multi-hop path consistency
