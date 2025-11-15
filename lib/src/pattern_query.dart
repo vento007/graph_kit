@@ -207,11 +207,6 @@ class PatternQuery<N extends Node> {
         // Check if this is a variable-length relationship
         final variableLengthSpec = _extractVariableLengthSpec(edgePart);
         if (variableLengthSpec != null) {
-          if (constraintsForEdge.isNotEmpty) {
-            throw UnsupportedError(
-              'Edge property filters are not supported on variable-length relationships yet',
-            );
-          }
           // Handle variable-length relationship using enumeratePaths
           final vlResults = _executeVariableLengthSegment(
             currentRows,
@@ -220,6 +215,7 @@ class PatternQuery<N extends Node> {
             edgeTypes,
             variableLengthSpec,
             isForward,
+            constraintsForEdge,
             nodeMetadata,
           );
           currentRows = vlResults;
@@ -294,11 +290,6 @@ class PatternQuery<N extends Node> {
       // Check for variable-length
       final variableLengthSpec = _extractVariableLengthSpec(edgePart);
       if (variableLengthSpec != null) {
-        if (constraintsForEdge.isNotEmpty) {
-          throw UnsupportedError(
-            'Edge property filters are not supported on variable-length relationships yet',
-          );
-        }
         currentRows = _executeVariableLengthSegment(
           currentRows,
           aliasHere,
@@ -306,6 +297,7 @@ class PatternQuery<N extends Node> {
           edgeTypes,
           variableLengthSpec,
           isForward,
+          constraintsForEdge,
           nodeMetadata,
         );
       } else {
@@ -346,11 +338,6 @@ class PatternQuery<N extends Node> {
       // Check for variable-length
       final variableLengthSpec = _extractVariableLengthSpec(edgePart);
       if (variableLengthSpec != null) {
-        if (constraintsForEdge.isNotEmpty) {
-          throw UnsupportedError(
-            'Edge property filters are not supported on variable-length relationships yet',
-          );
-        }
         currentRows = _executeVariableLengthSegment(
           currentRows,
           aliasHere,
@@ -358,6 +345,7 @@ class PatternQuery<N extends Node> {
           edgeTypes,
           variableLengthSpec,
           isForward,
+          constraintsForEdge,
           nodeMetadata,
         );
       } else {
@@ -457,6 +445,7 @@ class PatternQuery<N extends Node> {
     List<String> edgeTypes,
     VariableLengthSpec vlSpec,
     bool isForward,
+    List<_PropertyConstraint> edgeConstraints,
     Map<String, _NodePatternMetadata> nodeMetadata,
   ) {
     final nextRows = <Map<String, String>>[];
@@ -466,19 +455,16 @@ class PatternQuery<N extends Node> {
       final srcId = row[aliasHere];
       if (srcId == null) continue;
 
-      // Find all possible destinations within hop limits, matching ANY edge type
-      final allDestinations = <String>{};
-      for (final edgeType in edgeTypes) {
-        final destinations = _findVariableLengthDestinations(
-          srcId,
-          edgeType,
-          vlSpec,
-          isForward,
-        );
-        allDestinations.addAll(destinations);
-      }
+      // Find all possible destinations within hop limits, matching allowed types
+      final destinations = _findVariableLengthDestinations(
+        srcId,
+        edgeTypes,
+        vlSpec,
+        isForward,
+        edgeConstraints,
+      );
 
-      for (final destId in allDestinations) {
+      for (final destId in destinations) {
         if (!_nodeMatchesConstraints(nextAlias, destId, nodeMetadata)) {
           continue;
         }
@@ -498,13 +484,15 @@ class PatternQuery<N extends Node> {
   /// Finds all destinations reachable via variable-length paths
   Set<String> _findVariableLengthDestinations(
     String srcId,
-    String edgeType,
+    List<String> edgeTypes,
     VariableLengthSpec vlSpec,
     bool isForward,
+    List<_PropertyConstraint> edgeConstraints,
   ) {
     final destinations = <String>{};
     final maxHops = vlSpec.effectiveMaxHops;
     final minHops = vlSpec.effectiveMinHops;
+    final matchAllEdgeTypes = edgeTypes.isEmpty;
 
     // Use breadth-first search to find all reachable nodes within hop limits
     final queue = <({String nodeId, int hops})>[];
@@ -523,13 +511,37 @@ class PatternQuery<N extends Node> {
 
       // Continue exploring if we haven't reached max hops
       if (current.hops < maxHops) {
-        final neighbors = isForward
-            ? graph.outNeighbors(current.nodeId, edgeType)
-            : graph.inNeighbors(current.nodeId, edgeType);
+        final adjacency = isForward ? graph.out[current.nodeId] : graph.inn[current.nodeId];
+        if (adjacency == null || adjacency.isEmpty) {
+          continue;
+        }
 
-        for (final neighbor in neighbors) {
-          final newHops = current.hops + 1;
-          if (!visited.containsKey(neighbor) || visited[neighbor]! > newHops) {
+        final typesToExplore =
+            matchAllEdgeTypes ? adjacency.keys : edgeTypes;
+
+        for (final edgeType in typesToExplore) {
+          final neighbors = isForward
+              ? graph.outNeighbors(current.nodeId, edgeType)
+              : graph.inNeighbors(current.nodeId, edgeType);
+
+          if (neighbors.isEmpty) continue;
+
+          for (final neighbor in neighbors) {
+            if (!_edgeMatchesConstraints(
+              current.nodeId,
+              neighbor,
+              edgeType,
+              isForward,
+              edgeConstraints,
+            )) {
+              continue;
+            }
+
+            final newHops = current.hops + 1;
+            final previous = visited[neighbor];
+            if (previous != null && previous <= newHops) {
+              continue;
+            }
             visited[neighbor] = newHops;
             queue.add((nodeId: neighbor, hops: newHops));
           }
@@ -707,6 +719,68 @@ class PatternQuery<N extends Node> {
     );
   }
 
+  /// Visible for tests: extracts edge property constraints from a pattern
+  /// Returns a list entry per connection; each entry is a list of constraint maps
+  List<List<Map<String, dynamic>>> extractEdgeConstraintMapsForTesting(
+    String pattern,
+  ) {
+    final result = _parser.parse(pattern);
+    if (result is Failure) {
+      throw FormatException(
+        'Failed to parse pattern at position ${result.position}: ${result.message}',
+        pattern,
+        result.position,
+      );
+    }
+
+    dynamic patternWithWhere;
+    if (result.value is List) {
+      if (result.value.length >= 2 && result.value[0] != null) {
+        patternWithWhere = result.value[1];
+      } else {
+        patternWithWhere =
+            result.value.length > 1 ? result.value[1] : result.value[0];
+      }
+    } else {
+      patternWithWhere = result.value;
+    }
+
+    final parts = <String>[];
+    final directions = <bool>[];
+    final edgeVars = <String?>[];
+    final nodeMetadata = <String, _NodePatternMetadata>{};
+    final edgeConstraints = <List<_PropertyConstraint>>[];
+    final edgeBindings = <String, _EdgeVariableBinding>{};
+
+    if (patternWithWhere is List && patternWithWhere.isNotEmpty) {
+      _extractPartsFromParseTree(
+        patternWithWhere[0],
+        parts,
+        directions,
+        edgeVars,
+        nodeMetadata,
+        edgeConstraints,
+        edgeBindings,
+      );
+    }
+
+    return edgeConstraints
+        .map(
+          (constraintList) => constraintList
+              .map(
+                (constraint) => {
+                  'key': constraint.key,
+                  'operator': constraint.operator == _PropertyOperator.equals
+                      ? '='
+                      : '~',
+                  'value': constraint.value,
+                },
+              )
+              .toList(),
+        )
+        .toList();
+  }
+
   void _extractPartsFromParseTree(
     dynamic parseTree,
     List<String> parts,
@@ -827,12 +901,26 @@ class PatternQuery<N extends Node> {
   /// Extracts variable-length specification from edge string
   VariableLengthSpec? _extractVariableLengthSpec(String edgeStr) {
     // Look for patterns like [:TYPE*], [:TYPE*1..3], [:TYPE*2..], [:TYPE*..5]
-    final match = RegExp(r'\[:([^\*]+)\*([^\]]*)]').firstMatch(edgeStr);
+    final match = RegExp(r'\[([^\]]+)\]').firstMatch(edgeStr);
     if (match == null) return null;
 
-    final vlPart = match.group(2) ?? '';
+    final content = match.group(1) ?? '';
+    final starIndex = content.indexOf('*');
+    if (starIndex == -1) return null;
+
+    // Everything after * (before optional property filter) is the spec
+    var vlPart = content.substring(starIndex + 1).trim();
     if (vlPart.isEmpty) {
       // Just * means unlimited
+      return const VariableLengthSpec();
+    }
+
+    // Remove inline property filter if present
+    final braceIndex = vlPart.indexOf('{');
+    if (braceIndex != -1) {
+      vlPart = vlPart.substring(0, braceIndex).trim();
+    }
+    if (vlPart.isEmpty) {
       return const VariableLengthSpec();
     }
 
@@ -1141,63 +1229,82 @@ class PatternQuery<N extends Node> {
   // Copied helper methods from original parser
   /// Extracts edge types from a segment. Returns list of types for OR syntax [:TYPE1|TYPE2]
   List<String>? _edgeTypeFrom(String segment) {
-    for (int i = 0; i < segment.length; i++) {
-      if (segment[i] == '[') {
-        int j = i + 1;
-        while (j < segment.length && segment[j].trim().isEmpty) {
-          j++;
-        }
-        bool foundColon = false;
-        while (j < segment.length) {
-          final c = segment[j];
-          if (c == ':') {
-            foundColon = true;
-            j++;
-            break;
-          }
-          if (c == ']') {
-            // Found [variable] or [] without type - this is a wildcard
-            return []; // Empty list signals wildcard (match all types)
-          }
-          j++;
-        }
-        if (!foundColon) continue;
-
-        int depth = 1;
-        final contentStart = j;
-        int k = j;
-        while (k < segment.length) {
-          final c = segment[k];
-          if (c == '[') {
-            depth++;
-          } else if (c == ']') {
-            depth--;
-            if (depth == 0) {
-              // Extract edge type content (before *)
-              String fullContent = segment.substring(contentStart, k);
-              final braceIndex = fullContent.indexOf('{');
-              if (braceIndex != -1) {
-                fullContent = fullContent.substring(0, braceIndex);
-              }
-              fullContent = fullContent.trim();
-              if (fullContent.contains('*')) {
-                fullContent = fullContent.split('*')[0];
-              }
-              // Split by | to support multiple types
-              final types = fullContent
-                  .split('|')
-                  .map((t) => t.trim())
-                  .where((t) => t.isNotEmpty)
-                  .toList();
-              return types.isEmpty ? null : types;
-            }
-          }
-          k++;
-        }
-        return null;
-      }
+    final bracketIndex = segment.indexOf('[');
+    if (bracketIndex == -1) {
+      return null;
     }
-    return null;
+
+    var idx = bracketIndex + 1;
+
+    String charAt(int position) => segment[position];
+    bool isWhitespace(int position) => charAt(position).trim().isEmpty;
+
+    while (idx < segment.length && isWhitespace(idx)) {
+      idx++;
+    }
+
+    while (idx < segment.length && _isVariableNameChar(charAt(idx))) {
+      idx++;
+    }
+
+    while (idx < segment.length && isWhitespace(idx)) {
+      idx++;
+    }
+
+    if (idx >= segment.length) {
+      return null;
+    }
+
+    if (segment[idx] != ':') {
+      // No explicit type list - treat as wildcard
+      return <String>[];
+    }
+    idx++; // Skip colon
+
+    final buffer = StringBuffer();
+    var depth = 1;
+    while (idx < segment.length) {
+      final ch = segment[idx];
+      if (ch == '[') {
+        depth++;
+      } else if (ch == ']') {
+        depth--;
+        if (depth == 0) {
+          break;
+        }
+      }
+      buffer.write(ch);
+      idx++;
+    }
+
+    var fullContent = buffer.toString();
+    final braceIndex = fullContent.indexOf('{');
+    if (braceIndex != -1) {
+      fullContent = fullContent.substring(0, braceIndex);
+    }
+    final starIndex = fullContent.indexOf('*');
+    if (starIndex != -1) {
+      fullContent = fullContent.substring(0, starIndex);
+    }
+    fullContent = fullContent.trim();
+    if (fullContent.isEmpty) {
+      return null;
+    }
+    final types = fullContent
+        .split('|')
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    return types.isEmpty ? null : types;
+  }
+
+  bool _isVariableNameChar(String ch) {
+    if (ch.isEmpty) return false;
+    final code = ch.codeUnitAt(0);
+    final isLower = code >= 97 && code <= 122;
+    final isUpper = code >= 65 && code <= 90;
+    final isDigit = code >= 48 && code <= 57;
+    return isLower || isUpper || isDigit || ch == '_';
   }
 
   List<_PropertyConstraint> _edgeConstraintsFromInfo(String edgeInfo) {

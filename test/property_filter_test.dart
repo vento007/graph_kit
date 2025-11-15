@@ -147,5 +147,32 @@ void main() {
       expect(path.nodes['policy'], equals('policy-low'));
       expect(path.nodes['asset'], equals('asset-eu'));
     });
+
+    test('planner captures inline filters on variable-length segments', () {
+      final constraintMaps = query.extractEdgeConstraintMapsForTesting(
+        'policy-[:GRANTS_ACCESS*1..2 {since:2020}]->asset',
+      );
+
+      expect(constraintMaps, hasLength(1));
+      final firstEdgeConstraints = constraintMaps.first;
+      expect(firstEdgeConstraints, hasLength(1));
+      final constraint = firstEdgeConstraints.single;
+      expect(constraint['key'], equals('since'));
+      expect(constraint['operator'], equals('='));
+      expect(constraint['value'], equals(2020));
+    });
+
+    test('planner keeps filters when spacing varies on variable-length edges',
+        () {
+      final constraintMaps = query.extractEdgeConstraintMapsForTesting(
+        'asset<-[:GRANTS_ACCESS*{region:"us-west"}]-segment',
+      );
+
+      expect(constraintMaps, hasLength(1));
+      final constraint = constraintMaps.first.single;
+      expect(constraint['key'], equals('region'));
+      expect(constraint['operator'], equals('='));
+      expect(constraint['value'], equals('us-west'));
+    });
   });
 }

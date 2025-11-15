@@ -5,12 +5,24 @@ import 'package:graph_kit/graph_kit.dart';
 // Helper function to test variable-length spec parsing
 VariableLengthSpec? _extractVariableLengthSpecForTesting(String edgeStr) {
   // Look for patterns like [:TYPE*], [:TYPE*1..3], [:TYPE*2..], [:TYPE*..5]
-  final match = RegExp(r'\[:([^\*]+)\*([^\]]*)]').firstMatch(edgeStr);
+  final match = RegExp(r'\[([^\]]+)\]').firstMatch(edgeStr);
   if (match == null) return null;
 
-  final vlPart = match.group(2) ?? '';
+  final content = match.group(1) ?? '';
+  final starIndex = content.indexOf('*');
+  if (starIndex == -1) return null;
+
+  var vlPart = content.substring(starIndex + 1).trim();
   if (vlPart.isEmpty) {
     // Just * means unlimited
+    return const VariableLengthSpec();
+  }
+
+  final braceIndex = vlPart.indexOf('{');
+  if (braceIndex != -1) {
+    vlPart = vlPart.substring(0, braceIndex).trim();
+  }
+  if (vlPart.isEmpty) {
     return const VariableLengthSpec();
   }
 
@@ -255,6 +267,19 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
         final result4 = parser.parse('user-[:MANAGES*..4]->team');
         print('Result: ${result4 is Success ? "SUCCESS" : "FAILURE: ${result4.message}"}');
         expect(result4 is Success, isTrue);
+
+        // Test with inline property filter (with spaces)
+        print('Testing user-[:MANAGES*2..4 {since: 2020}]->team...');
+        final result5 =
+            parser.parse('user-[:MANAGES*2..4 {since: 2020}]->team');
+        print('Result: ${result5 is Success ? "SUCCESS" : "FAILURE: ${result5.message}"}');
+        expect(result5 is Success, isTrue);
+
+        // Test with inline property filter (no spaces)
+        print('Testing user-[:MANAGES*{strength:8}]->team...');
+        final result6 = parser.parse('user-[:MANAGES*{strength:8}]->team');
+        print('Result: ${result6 is Success ? "SUCCESS" : "FAILURE: ${result6.message}"}');
+        expect(result6 is Success, isTrue);
       });
 
       test('should extract variable-length specifications correctly', () {
@@ -292,6 +317,28 @@ admin:Person{label=System Administrator}'''.replaceAll('\n', '').replaceAll(' ',
         // Test non-variable-length
         final spec5 = _extractVariableLengthSpecForTesting('[:MANAGES]');
         expect(spec5, isNull);
+
+        // Test variable-length with property filter (spaces)
+        final spec6 = _extractVariableLengthSpecForTesting(
+          '[:MANAGES*1..3 {since: 2020}]',
+        );
+        expect(spec6, isNotNull);
+        expect(spec6!.minHops, equals(1));
+        expect(spec6.maxHops, equals(3));
+
+        // Test variable-length with property filter (no spaces)
+        final spec7 = _extractVariableLengthSpecForTesting(
+          '[:MANAGES*{strength: 8}]',
+        );
+        expect(spec7, isNotNull);
+        expect(spec7!.isUnlimited, isTrue);
+
+        // Test property filter only (should still be unlimited)
+        final spec8 = _extractVariableLengthSpecForTesting(
+          '[:MANAGES* {strength: 8}]',
+        );
+        expect(spec8, isNotNull);
+        expect(spec8!.isUnlimited, isTrue);
       });
 
       // TODO: Re-enable when variable-length execution is working
