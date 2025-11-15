@@ -8,6 +8,7 @@ GraphKit implements a powerful subset of the Cypher query language for graph pat
 - [Basic Pattern Matching](#basic-pattern-matching)
 - [Node Types and Labels](#node-types-and-labels)
 - [Relationships and Edges](#relationships-and-edges)
+- [Relationship Properties](#relationship-properties)
 - [Multiple Edge Types](#multiple-edge-types)
 - [Mixed Direction Patterns](#mixed-direction-patterns)
 - [Variable-Length Paths](#variable-length-paths)
@@ -344,6 +345,41 @@ WHERE emp1.age > 30 AND emp2.age > 30
 # With label filtering
 MATCH person1:Person{label~Admin}->team<-[:MANAGES]-manager
 ```
+
+## Relationship Properties
+
+Relationships can store metadata (weights, timestamps, workflow states) via the optional `properties` argument when you add edges:
+
+```dart
+graph.addEdge(
+  'alice',
+  'KNOWS',
+  'bob',
+  properties: {'since': 2020, 'strength': 90},
+);
+```
+
+Use that metadata throughout your Cypher-style queries:
+
+```cypher
+# Inline relationship filter (forward or backward)
+MATCH person-[r:KNOWS {since: 2020}]->friend
+
+# WHERE clause referencing relationship properties
+MATCH person-[r:KNOWS]->friend
+WHERE r.strength >= 80
+
+# RETURN clause projecting relationship properties
+MATCH person-[r:KNOWS]->friend
+RETURN person, friend, r.since AS connectedSince, r.strength
+
+# Backward example
+MATCH mentee<-[:MENTORS {since: 2021}]-mentor
+```
+
+`matchPaths` and `matchPathsMany` include the same metadata on every `PathEdge`, so visualizations and layout tooling can inspect relationship properties directly.
+
+> **Limitation:** Relationship property filters currently apply only to fixed-length hops. Variable-length patterns (`[:TYPE*...]`) ignore `{...}` filters and `r.prop` expressions until support is implemented.
 
 ## Variable-Length Paths
 

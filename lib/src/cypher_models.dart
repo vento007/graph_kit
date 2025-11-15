@@ -16,12 +16,16 @@ class PathEdge {
   /// Variable name for target node from pattern (e.g., 'team')
   final String toVariable;
 
+  /// Optional properties captured from the relationship.
+  final Map<String, dynamic>? properties;
+
   const PathEdge({
     required this.from,
     required this.to,
     required this.type,
     required this.fromVariable,
     required this.toVariable,
+    this.properties,
   });
 
   @override
@@ -36,7 +40,8 @@ class PathEdge {
           to == other.to &&
           type == other.type &&
           fromVariable == other.fromVariable &&
-          toVariable == other.toVariable;
+          toVariable == other.toVariable &&
+          _mapEquals(properties, other.properties);
 
   @override
   int get hashCode =>
@@ -44,7 +49,18 @@ class PathEdge {
       to.hashCode ^
       type.hashCode ^
       fromVariable.hashCode ^
-      toVariable.hashCode;
+      toVariable.hashCode ^
+      (properties?.hashCode ?? 0);
+
+  bool _mapEquals(Map<String, dynamic>? a, Map<String, dynamic>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return a == b;
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (!b.containsKey(key) || a[key] != b[key]) return false;
+    }
+    return true;
+  }
 }
 
 /// Represents a complete path match result with both nodes and edges.
@@ -134,42 +150,42 @@ class VariableLengthSpec {
 class ReturnItem {
   /// Variable name (for simple returns like "RETURN person")
   final String? variable;
-  
+
   /// Variable name for property access (for "RETURN person.name", this is "person")
   final String? propertyVariable;
-  
+
   /// Property name for property access (for "RETURN person.name", this is "name")
   final String? propertyName;
-  
+
   /// Optional alias (for "RETURN person AS p" or "RETURN person.name AS displayName")
   final String? alias;
-  
+
   const ReturnItem({
     this.variable,
     this.propertyVariable,
     this.propertyName,
     this.alias,
   });
-  
+
   /// Returns true if this is a property access (person.name)
   bool get isProperty => propertyVariable != null && propertyName != null;
-  
+
   /// Returns the column name to use in results (alias if present, otherwise default)
   String get columnName {
     if (alias != null) return alias!;
     if (isProperty) return '$propertyVariable.$propertyName';
     return variable!;
   }
-  
+
   /// Returns the source variable name (for looking up in row data)
   String get sourceVariable => propertyVariable ?? variable!;
-  
+
   @override
   String toString() {
     if (isProperty) {
-      return alias != null 
-        ? '$propertyVariable.$propertyName AS $alias'
-        : '$propertyVariable.$propertyName';
+      return alias != null
+          ? '$propertyVariable.$propertyName AS $alias'
+          : '$propertyVariable.$propertyName';
     }
     return alias != null ? '$variable AS $alias' : variable!;
   }

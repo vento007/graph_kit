@@ -73,6 +73,8 @@ class CypherPatternGrammar extends GrammarDefinition {
       whitespace().star() &
       ref0(variableLengthModifier).optional() &
       whitespace().star() &
+      ref0(propertyFilter).optional() &
+      whitespace().star() &
       char(']');
 
   Parser edgeTypeList() => ref0(variable) & (char('|') & ref0(variable)).star();

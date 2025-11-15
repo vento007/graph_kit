@@ -1,3 +1,4 @@
+import 'edge.dart';
 import 'node.dart';
 
 /// A generic directed multi-graph with typed edges and efficient adjacency storage.
@@ -39,6 +40,11 @@ class Graph<N extends Node> {
   /// Maps node IDs to their corresponding node instances.
   final Map<String, N> nodesById = {};
 
+  /// Edge storage keyed by source -> edgeType -> destination.
+  ///
+  /// Each entry stores the unique edge object (with optional properties).
+  final Map<String, Map<String, Map<String, Edge>>> _edges = {};
+
   /// Adds or replaces a node in the graph.
   ///
   /// If a node with the same [id] already exists, it will be replaced.
@@ -53,6 +59,31 @@ class Graph<N extends Node> {
     nodesById[n.id] = n;
     out.putIfAbsent(n.id, () => {});
     inn.putIfAbsent(n.id, () => {});
+  }
+
+  /// Returns all edges in the graph. Useful for serialization and inspection.
+  Iterable<Edge> get edges sync* {
+    for (final edgesByType in _edges.values) {
+      for (final edgesByDst in edgesByType.values) {
+        for (final edge in edgesByDst.values) {
+          yield edge;
+        }
+      }
+    }
+  }
+
+  /// Returns the stored edge object (if any) for the given identifiers.
+  Edge? getEdge(String src, String edgeType, String dst) {
+    return _edges[src]?[edgeType]?[dst];
+  }
+
+  /// Returns the properties map for a given edge, if stored.
+  Map<String, dynamic>? edgeProperties(
+    String src,
+    String edgeType,
+    String dst,
+  ) {
+    return getEdge(src, edgeType, dst)?.properties;
   }
 
   /// Adds a directed edge from [src] to [dst] with the given [edgeType].
@@ -71,7 +102,12 @@ class Graph<N extends Node> {
   /// graph.addEdge('u1', 'MEMBER_OF', 'g1');
   /// graph.addEdge('u1', 'HAS_CLIENT', 'c1');
   /// ```
-  void addEdge(String src, String edgeType, String dst) {
+  void addEdge(
+    String src,
+    String edgeType,
+    String dst, {
+    Map<String, dynamic>? properties,
+  }) {
     final srcByType = out.putIfAbsent(src, () => {});
     final srcTypeSet = srcByType.putIfAbsent(edgeType, () => <String>{});
     srcTypeSet.add(dst);
@@ -79,6 +115,23 @@ class Graph<N extends Node> {
     final dstByType = inn.putIfAbsent(dst, () => {});
     final dstTypeSet = dstByType.putIfAbsent(edgeType, () => <String>{});
     dstTypeSet.add(src);
+
+    final edgesByType = _edges.putIfAbsent(src, () => {});
+    final edgesByDst = edgesByType.putIfAbsent(edgeType, () => {});
+    final existing = edgesByDst[dst];
+
+    if (existing != null) {
+      if (properties != null) {
+        edgesByDst[dst] = existing.copyWith(properties: properties);
+      }
+    } else {
+      edgesByDst[dst] = Edge(
+        src: src,
+        type: edgeType,
+        dst: dst,
+        properties: properties,
+      );
+    }
   }
 
   /// Returns the set of destination node IDs reachable from [src] via [edgeType].
