@@ -103,6 +103,34 @@ void main() {
       expect(projectRestored.properties?['priority'], equals('high'));
     });
 
+    test('serialization with edge properties', () {
+      final graph = Graph<Node>();
+
+      graph.addNode(Node(id: 'alice', type: 'User', label: 'Alice'));
+      graph.addNode(Node(id: 'bob', type: 'User', label: 'Bob'));
+
+      graph.addEdge(
+        'alice',
+        'KNOWS',
+        'bob',
+        properties: {'since': 2015, 'closeness': 0.9},
+      );
+
+      final json = GraphSerializer.toJson(graph);
+      final edges = json['edges'] as List<dynamic>;
+      expect(edges, hasLength(1));
+      final edgeJson = edges.first as Map<String, dynamic>;
+      expect(edgeJson['src'], equals('alice'));
+      expect(edgeJson['dst'], equals('bob'));
+      expect(edgeJson['type'], equals('KNOWS'));
+      expect(edgeJson['properties'], equals({'since': 2015, 'closeness': 0.9}));
+
+      final restored = GraphSerializer.fromJson(json, Node.fromJson);
+      final restoredEdge = restored.getEdge('alice', 'KNOWS', 'bob');
+      expect(restoredEdge?.properties?['since'], equals(2015));
+      expect(restoredEdge?.properties?['closeness'], equals(0.9));
+    });
+
     test('string serialization convenience methods', () {
       final graph = Graph<Node>();
 

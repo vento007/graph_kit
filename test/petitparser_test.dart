@@ -91,6 +91,23 @@ void main() {
       print('Result: ${result2 is Success ? "SUCCESS" : "FAILURE: ${result2.message}"}');
     });
 
+    test('should parse edge property filters', () {
+      final parser = grammar.build();
+
+      final patterns = [
+        'user-[:KNOWS {since: 2020}]->friend',
+        'user-[r:KNOWS {metAt=2022, status="close"}]->friend',
+        'user-[r:KNOWS*1..3 {strength: 5}]->friend',
+      ];
+
+      for (final pattern in patterns) {
+        final result = parser.parse(pattern);
+        print('Testing $pattern...');
+        print('Result: ${result is Success ? "SUCCESS" : "FAILURE: ${result.message}"}');
+        expect(result is Success, isTrue, reason: 'Pattern should parse: $pattern');
+      }
+    });
+
     test('should parse label filters', () {
       final parser = grammar.build();
 

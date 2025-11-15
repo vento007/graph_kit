@@ -39,21 +39,9 @@ class GraphSerializer {
       nodes.add(nodeJson);
     }
 
-    // Serialize edges by traversing the adjacency structure
-    final seenEdges = <String>{};
-    for (final srcId in graph.out.keys) {
-      final edgesByType = graph.out[srcId]!;
-      for (final edgeType in edgesByType.keys) {
-        final dstIds = edgesByType[edgeType]!;
-        for (final dstId in dstIds) {
-          // Create unique edge identifier to avoid duplicates
-          final edgeKey = '$srcId->$edgeType->$dstId';
-          if (!seenEdges.contains(edgeKey)) {
-            seenEdges.add(edgeKey);
-            edges.add({'src': srcId, 'type': edgeType, 'dst': dstId});
-          }
-        }
-      }
+    // Serialize edges using stored edge objects (includes properties)
+    for (final edge in graph.edges) {
+      edges.add(edge.toJson());
     }
 
     return {
@@ -121,7 +109,18 @@ class GraphSerializer {
           );
         }
 
-        graph.addEdge(src, type, dst);
+        Map<String, dynamic>? edgeProperties;
+        final rawProperties = edgeMap['properties'];
+        if (rawProperties != null) {
+          if (rawProperties is! Map<String, dynamic>) {
+            throw const FormatException(
+              'Edge "properties" field must be a map if provided',
+            );
+          }
+          edgeProperties = Map<String, dynamic>.from(rawProperties);
+        }
+
+        graph.addEdge(src, type, dst, properties: edgeProperties);
       }
     }
 
@@ -211,6 +210,7 @@ class GraphSerializer {
       final src = edgeData['src'];
       final type = edgeData['type'];
       final dst = edgeData['dst'];
+      final properties = edgeData['properties'];
 
       if (src is! String || src.isEmpty) {
         throw const FormatException('Edge "src" must be a non-empty string');
@@ -228,6 +228,12 @@ class GraphSerializer {
       if (!nodeIds.contains(dst)) {
         throw FormatException(
           'Edge references non-existent destination node: $dst',
+        );
+      }
+
+      if (properties != null && properties is! Map<String, dynamic>) {
+        throw FormatException(
+          'Edge $src-[:$type]->$dst has invalid "properties" field',
         );
       }
     }

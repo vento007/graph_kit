@@ -39,6 +39,8 @@ class PatternQuery<N extends Node> {
     final directions = <bool>[];
     final edgeVars = <String?>[]; // Track edge variables from pattern
     final nodeMetadata = <String, _NodePatternMetadata>{};
+    final edgeConstraints = <List<_PropertyConstraint>>[];
+    final edgeBindings = <String, _EdgeVariableBinding>{};
     dynamic whereClause;
     List<ReturnItem>? returnItems;
 
@@ -73,6 +75,8 @@ class PatternQuery<N extends Node> {
           directions,
           edgeVars,
           nodeMetadata,
+          edgeConstraints,
+          edgeBindings,
         );
 
         // Extract WHERE clause if present (second element is [whitespace, WHERE_clause])
@@ -95,6 +99,8 @@ class PatternQuery<N extends Node> {
     // Debug removed - working correctly
 
     if (parts.isEmpty) return const <Map<String, dynamic>>[];
+
+    final queryContext = _QueryContext(edgeBindings: edgeBindings);
 
     // Seed rows (copied logic from original)
     List<Map<String, String>> currentRows = <Map<String, String>>[];
@@ -155,6 +161,7 @@ class PatternQuery<N extends Node> {
             edgeVars,
             i,
             nodeMetadata,
+            edgeConstraints,
           );
           allRows.addAll(results);
         }
@@ -193,9 +200,18 @@ class PatternQuery<N extends Node> {
         }
         // Note: empty list [] means wildcard (match all types)
 
+        final constraintsForEdge = edgeConstraints.length > i
+            ? edgeConstraints[i]
+            : const <_PropertyConstraint>[];
+
         // Check if this is a variable-length relationship
         final variableLengthSpec = _extractVariableLengthSpec(edgePart);
         if (variableLengthSpec != null) {
+          if (constraintsForEdge.isNotEmpty) {
+            throw UnsupportedError(
+              'Edge property filters are not supported on variable-length relationships yet',
+            );
+          }
           // Handle variable-length relationship using enumeratePaths
           final vlResults = _executeVariableLengthSegment(
             currentRows,
@@ -218,6 +234,7 @@ class PatternQuery<N extends Node> {
             isForward,
             edgeVar,
             nodeMetadata,
+            constraintsForEdge,
           );
         }
 
@@ -227,12 +244,12 @@ class PatternQuery<N extends Node> {
 
     // Apply WHERE clause filtering if present
     if (whereClause != null) {
-      currentRows = _applyWhereClause(currentRows, whereClause);
+      currentRows = _applyWhereClause(currentRows, whereClause, queryContext);
     }
 
     // Apply RETURN clause if present (filtering and property resolution)
     if (returnItems != null) {
-      return _applyReturnClause(currentRows, returnItems);
+      return _applyReturnClause(currentRows, returnItems, queryContext);
     }
 
     // Backward compatibility: no RETURN clause returns all variables
@@ -248,6 +265,7 @@ class PatternQuery<N extends Node> {
     List<String?> edgeVars,
     int startIndex,
     Map<String, _NodePatternMetadata> nodeMetadata,
+    List<List<_PropertyConstraint>> edgeConstraints,
   ) {
     var currentRows = seedRows;
 
@@ -266,12 +284,21 @@ class PatternQuery<N extends Node> {
       }
       // Note: empty list [] means wildcard (match all types)
 
+      final constraintsForEdge = edgeConstraints.length > i
+          ? edgeConstraints[i]
+          : const <_PropertyConstraint>[];
+
       // Reverse direction when going backward
       final isForward = !isForwardInPattern;
 
       // Check for variable-length
       final variableLengthSpec = _extractVariableLengthSpec(edgePart);
       if (variableLengthSpec != null) {
+        if (constraintsForEdge.isNotEmpty) {
+          throw UnsupportedError(
+            'Edge property filters are not supported on variable-length relationships yet',
+          );
+        }
         currentRows = _executeVariableLengthSegment(
           currentRows,
           aliasHere,
@@ -291,6 +318,7 @@ class PatternQuery<N extends Node> {
           isForward,
           edgeVar,
           nodeMetadata,
+          constraintsForEdge,
         );
       }
 
@@ -311,9 +339,18 @@ class PatternQuery<N extends Node> {
       }
       // Note: empty list [] means wildcard (match all types)
 
+      final constraintsForEdge = edgeConstraints.length > i
+          ? edgeConstraints[i]
+          : const <_PropertyConstraint>[];
+
       // Check for variable-length
       final variableLengthSpec = _extractVariableLengthSpec(edgePart);
       if (variableLengthSpec != null) {
+        if (constraintsForEdge.isNotEmpty) {
+          throw UnsupportedError(
+            'Edge property filters are not supported on variable-length relationships yet',
+          );
+        }
         currentRows = _executeVariableLengthSegment(
           currentRows,
           aliasHere,
@@ -333,6 +370,7 @@ class PatternQuery<N extends Node> {
           isForward,
           edgeVar,
           nodeMetadata,
+          constraintsForEdge,
         );
       }
 
@@ -352,6 +390,7 @@ class PatternQuery<N extends Node> {
     bool isForward,
     String? edgeVar,
     Map<String, _NodePatternMetadata> nodeMetadata,
+    List<_PropertyConstraint> edgeConstraints,
   ) {
     final nextRows = <Map<String, String>>[];
     final seen = <String>{};
@@ -372,45 +411,31 @@ class PatternQuery<N extends Node> {
         }
       }
 
-      // Collect neighbors with their edge types
-      // If edgeVar is provided, we need to track which edge type was used
-      if (edgeVar != null) {
-        for (final edgeType in effectiveEdgeTypes) {
-          final neighbors = isForward
-              ? graph.outNeighbors(srcId, edgeType)
-              : graph.inNeighbors(srcId, edgeType);
+      for (final edgeType in effectiveEdgeTypes) {
+        final neighbors = isForward
+            ? graph.outNeighbors(srcId, edgeType)
+            : graph.inNeighbors(srcId, edgeType);
 
-          for (final nb in neighbors) {
-            if (!_nodeMatchesConstraints(nextAlias, nb, nodeMetadata)) {
-              continue;
-            }
-            final newRow = Map<String, String>.from(row);
-            newRow[nextAlias] = nb;
-            newRow[edgeVar] =
-                edgeType; // Bind edge variable to actual edge type
-            final keys = newRow.keys.toList()..sort();
-            final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
-            if (seen.add(sig)) {
-              nextRows.add(newRow);
-            }
-          }
-        }
-      } else {
-        // Original logic when no edge variable (for backward compatibility)
-        final allNeighbors = <String>{};
-        for (final edgeType in effectiveEdgeTypes) {
-          final neighbors = isForward
-              ? graph.outNeighbors(srcId, edgeType)
-              : graph.inNeighbors(srcId, edgeType);
-          allNeighbors.addAll(neighbors);
-        }
-
-        for (final nb in allNeighbors) {
+        for (final nb in neighbors) {
           if (!_nodeMatchesConstraints(nextAlias, nb, nodeMetadata)) {
             continue;
           }
+          if (!_edgeMatchesConstraints(
+            srcId,
+            nb,
+            edgeType,
+            isForward,
+            edgeConstraints,
+          )) {
+            continue;
+          }
+
           final newRow = Map<String, String>.from(row);
           newRow[nextAlias] = nb;
+          if (edgeVar != null) {
+            newRow[edgeVar] =
+                edgeType; // Bind edge variable to actual edge type
+          }
           final keys = newRow.keys.toList()..sort();
           final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
           if (seen.add(sig)) {
@@ -669,12 +694,16 @@ class PatternQuery<N extends Node> {
   ) {
     final edgeVars = <String?>[];
     final metadata = <String, _NodePatternMetadata>{};
+    final edgeConstraints = <List<_PropertyConstraint>>[];
+    final edgeBindings = <String, _EdgeVariableBinding>{};
     _extractPartsFromParseTree(
       parseTree,
       parts,
       directions,
       edgeVars,
       metadata,
+      edgeConstraints,
+      edgeBindings,
     );
   }
 
@@ -684,6 +713,8 @@ class PatternQuery<N extends Node> {
     List<bool> directions,
     List<String?> edgeVars,
     Map<String, _NodePatternMetadata> nodeMetadata,
+    List<List<_PropertyConstraint>> edgeConstraints,
+    Map<String, _EdgeVariableBinding> edgeBindings,
   ) {
     if (parseTree is! List) return;
 
@@ -701,29 +732,43 @@ class PatternQuery<N extends Node> {
 
           // Determine direction from connection
           final connectionStr = _flattenConnection(connection);
-          directions.add(connectionStr.contains('->'));
+          final isForward = connectionStr.contains('->');
+          directions.add(isForward);
 
           // Extract edge variable if present
           final edgeVar = _extractEdgeVariable(connection);
           edgeVars.add(edgeVar);
 
+          final currentAlias = parts.isNotEmpty ? _aliasOf(parts.last) : null;
+          final flattenedSegment = _flattenSegment(segment, nodeMetadata);
+          final nextAlias = _aliasOf(flattenedSegment);
+
+          if (edgeVar != null && currentAlias != null && nextAlias != null) {
+            final fromAlias = isForward ? currentAlias : nextAlias;
+            final toAlias = isForward ? nextAlias : currentAlias;
+            edgeBindings[edgeVar] = _EdgeVariableBinding(
+              variable: edgeVar,
+              fromAlias: fromAlias,
+              toAlias: toAlias,
+            );
+          }
+
           // Add edge info to the appropriate part based on direction
           final edgeInfo = _extractEdgeFromConnection(connection);
-          final isForward = connectionStr.contains('->');
+          edgeConstraints.add(_edgeConstraintsFromInfo(edgeInfo));
 
           if (isForward) {
             // Forward: edge info goes with current (source) part
             if (parts.isNotEmpty && edgeInfo.isNotEmpty) {
               parts[parts.length - 1] = parts[parts.length - 1] + edgeInfo;
             }
-            parts.add(_flattenSegment(segment, nodeMetadata));
+            parts.add(flattenedSegment);
           } else {
             // Backward: edge info goes with next (target) part
-            final nextSegment = _flattenSegment(segment, nodeMetadata);
             if (edgeInfo.isNotEmpty) {
-              parts.add(nextSegment + edgeInfo);
+              parts.add(flattenedSegment + edgeInfo);
             } else {
-              parts.add(nextSegment);
+              parts.add(flattenedSegment);
             }
           }
         }
@@ -902,6 +947,87 @@ class PatternQuery<N extends Node> {
     return true;
   }
 
+  bool _edgeMatchesConstraints(
+    String currentId,
+    String neighborId,
+    String edgeType,
+    bool isForward,
+    List<_PropertyConstraint> constraints,
+  ) {
+    if (constraints.isEmpty) return true;
+
+    final actualSource = isForward ? currentId : neighborId;
+    final actualTarget = isForward ? neighborId : currentId;
+    final properties = graph.edgeProperties(
+      actualSource,
+      edgeType,
+      actualTarget,
+    );
+
+    for (final constraint in constraints) {
+      if (!_edgePropertyConstraintSatisfied(
+        actualSource,
+        actualTarget,
+        edgeType,
+        properties,
+        constraint,
+      )) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _edgePropertyConstraintSatisfied(
+    String sourceId,
+    String targetId,
+    String edgeType,
+    Map<String, dynamic>? properties,
+    _PropertyConstraint constraint,
+  ) {
+    final actualValue = _readEdgeProperty(
+      sourceId,
+      targetId,
+      edgeType,
+      properties,
+      constraint.key,
+    );
+    if (actualValue == null) return false;
+
+    switch (constraint.operator) {
+      case _PropertyOperator.contains:
+        final actualStr = actualValue.toString().toLowerCase();
+        final expected = constraint.value.toString().toLowerCase();
+        return actualStr.contains(expected);
+      case _PropertyOperator.equals:
+        return _compareValues(actualValue, '=', constraint.value);
+    }
+  }
+
+  dynamic _readEdgeProperty(
+    String sourceId,
+    String targetId,
+    String edgeType,
+    Map<String, dynamic>? properties,
+    String key,
+  ) {
+    switch (key) {
+      case 'type':
+        return edgeType;
+      case 'src':
+      case 'source':
+      case 'from':
+        return sourceId;
+      case 'dst':
+      case 'dest':
+      case 'target':
+      case 'to':
+        return targetId;
+      default:
+        return properties?[key];
+    }
+  }
+
   bool _propertyConstraintSatisfied(Node node, _PropertyConstraint constraint) {
     final actual = _readNodeProperty(node, constraint.key);
     if (actual == null) return false;
@@ -1049,6 +1175,11 @@ class PatternQuery<N extends Node> {
             if (depth == 0) {
               // Extract edge type content (before *)
               String fullContent = segment.substring(contentStart, k);
+              final braceIndex = fullContent.indexOf('{');
+              if (braceIndex != -1) {
+                fullContent = fullContent.substring(0, braceIndex);
+              }
+              fullContent = fullContent.trim();
               if (fullContent.contains('*')) {
                 fullContent = fullContent.split('*')[0];
               }
@@ -1067,6 +1198,21 @@ class PatternQuery<N extends Node> {
       }
     }
     return null;
+  }
+
+  List<_PropertyConstraint> _edgeConstraintsFromInfo(String edgeInfo) {
+    final filter = _extractEdgePropertyFilter(edgeInfo);
+    if (filter == null) return const [];
+    return _parsePropertyFilterString(filter);
+  }
+
+  String? _extractEdgePropertyFilter(String edgeInfo) {
+    if (edgeInfo.isEmpty) return null;
+    final start = edgeInfo.indexOf('{');
+    if (start == -1) return null;
+    final end = edgeInfo.lastIndexOf('}');
+    if (end == -1 || end < start) return null;
+    return edgeInfo.substring(start, end + 1);
   }
 
   List<PathEdge> buildEdgesForRow(String pattern, Map<String, String> row) {
@@ -1168,6 +1314,8 @@ class PatternQuery<N extends Node> {
 
       if (actualEdgeType == null) continue;
 
+      final edgeProps = graph.edgeProperties(fromId, actualEdgeType, toId);
+
       // Create the edge based on direction
       if (isForward) {
         edges.add(
@@ -1177,6 +1325,7 @@ class PatternQuery<N extends Node> {
             type: actualEdgeType,
             fromVariable: fromVar,
             toVariable: toVar,
+            properties: edgeProps,
           ),
         );
       } else {
@@ -1187,6 +1336,7 @@ class PatternQuery<N extends Node> {
             type: actualEdgeType,
             fromVariable: toVar,
             toVariable: fromVar,
+            properties: edgeProps,
           ),
         );
       }
@@ -1292,6 +1442,8 @@ class PatternQuery<N extends Node> {
         }
         if (actualType == null) return const <List<PathEdge>>[];
 
+        final edgeProps = graph.edgeProperties(fromId, actualType, toId);
+
         final hopEdge = isForward
             ? PathEdge(
                 from: row[fromVar]!,
@@ -1299,6 +1451,7 @@ class PatternQuery<N extends Node> {
                 type: actualType,
                 fromVariable: fromVar,
                 toVariable: toVar,
+                properties: edgeProps,
               )
             : PathEdge(
                 from: row[toVar]!,
@@ -1306,6 +1459,7 @@ class PatternQuery<N extends Node> {
                 type: actualType,
                 fromVariable: toVar,
                 toVariable: fromVar,
+                properties: edgeProps,
               );
 
         for (final seq in sequences) {
@@ -1378,6 +1532,10 @@ class PatternQuery<N extends Node> {
         for (final nb in neighbors) {
           if (visited.contains(nb)) continue;
 
+          final edgeProps = isForward
+              ? graph.edgeProperties(currentId, type, nb)
+              : graph.edgeProperties(nb, type, currentId);
+
           final edge = isForward
               ? PathEdge(
                   from: currentId,
@@ -1385,6 +1543,7 @@ class PatternQuery<N extends Node> {
                   type: type,
                   fromVariable: fromVariable,
                   toVariable: toVariable,
+                  properties: edgeProps,
                 )
               : PathEdge(
                   from: nb,
@@ -1392,6 +1551,7 @@ class PatternQuery<N extends Node> {
                   type: type,
                   fromVariable: toVariable,
                   toVariable: fromVariable,
+                  properties: edgeProps,
                 );
 
           visited.add(nb);
@@ -1643,6 +1803,7 @@ class PatternQuery<N extends Node> {
   List<Map<String, dynamic>> _applyReturnClause(
     List<Map<String, String>> rows,
     List<ReturnItem> returnItems,
+    _QueryContext context,
   ) {
     if (returnItems.isEmpty) {
       return rows.map((row) => row.cast<String, dynamic>()).toList();
@@ -1685,16 +1846,34 @@ class PatternQuery<N extends Node> {
         final columnName = item.columnName;
 
         if (item.isProperty) {
-          // Property access: person.name
-          final nodeId = row[item.sourceVariable];
-          if (nodeId != null) {
-            final node = graph.nodesById[nodeId];
-            final value = node?.properties?[item.propertyName];
-            resultRow[columnName] =
-                value; // Can be null if property doesn't exist
-          } else {
-            resultRow[columnName] = null; // Variable not in row
+          final variable = item.sourceVariable;
+          final propertyName = item.propertyName!;
+
+          // Node property projection
+          if (!context.edgeBindings.containsKey(variable)) {
+            final nodeId = row[variable];
+            if (nodeId != null) {
+              final node = graph.nodesById[nodeId];
+              if (node != null) {
+                resultRow[columnName] = _readNodeProperty(node, propertyName);
+                continue;
+              }
+            }
           }
+
+          // Edge property projection
+          if (context.edgeBindings.containsKey(variable)) {
+            final edgeValue = _resolveEdgePropertyValue(
+              row,
+              variable,
+              propertyName,
+              context,
+            );
+            resultRow[columnName] = edgeValue;
+            continue;
+          }
+
+          resultRow[columnName] = null;
         } else {
           // Simple variable: person
           final nodeId = row[item.variable];
@@ -1712,28 +1891,37 @@ class PatternQuery<N extends Node> {
   List<Map<String, String>> _applyWhereClause(
     List<Map<String, String>> rows,
     dynamic whereClause,
+    _QueryContext context,
   ) {
     if (whereClause == null) return rows;
 
     return rows
-        .where((row) => _evaluateWhereExpression(row, whereClause))
+        .where((row) => _evaluateWhereExpression(row, whereClause, context))
         .toList();
   }
 
-  bool _evaluateWhereExpression(Map<String, String> row, dynamic whereExpr) {
+  bool _evaluateWhereExpression(
+    Map<String, String> row,
+    dynamic whereExpr,
+    _QueryContext context,
+  ) {
     if (whereExpr is! List) return true;
 
     // Navigate to the actual WHERE expression content
     // Structure: [WHERE, whitespace, expression]
     if (whereExpr.length >= 3 && whereExpr[0] == 'WHERE') {
-      return _evaluateExpression(row, whereExpr[2]);
+      return _evaluateExpression(row, whereExpr[2], context);
     }
 
     // Direct expression evaluation
-    return _evaluateExpression(row, whereExpr);
+    return _evaluateExpression(row, whereExpr, context);
   }
 
-  bool _evaluateExpression(Map<String, String> row, dynamic expr) {
+  bool _evaluateExpression(
+    Map<String, String> row,
+    dynamic expr,
+    _QueryContext context,
+  ) {
     if (expr is! List) return true;
     if (expr.isEmpty) return true;
 
@@ -1741,12 +1929,12 @@ class PatternQuery<N extends Node> {
     // Structure: [first_term, [OR_operations]*]
     if (expr.length >= 2 && expr[1] is List) {
       final orOperations = expr[1] as List;
-      bool result = _evaluateAndExpression(row, expr[0]);
+      bool result = _evaluateAndExpression(row, expr[0], context);
 
       for (final op in orOperations) {
         if (op is List && op.length >= 4 && _containsString(op, 'OR')) {
           final rightExpr = op[3]; // The expression after OR
-          final rightResult = _evaluateAndExpression(row, rightExpr);
+          final rightResult = _evaluateAndExpression(row, rightExpr, context);
           result = result || rightResult;
         }
       }
@@ -1754,10 +1942,14 @@ class PatternQuery<N extends Node> {
     }
 
     // Single expression (no OR)
-    return _evaluateAndExpression(row, expr);
+    return _evaluateAndExpression(row, expr, context);
   }
 
-  bool _evaluateAndExpression(Map<String, String> row, dynamic expr) {
+  bool _evaluateAndExpression(
+    Map<String, String> row,
+    dynamic expr,
+    _QueryContext context,
+  ) {
     if (expr is! List) return true;
     if (expr.isEmpty) return true;
 
@@ -1765,12 +1957,16 @@ class PatternQuery<N extends Node> {
     // Structure: [first_term, [AND_operations]*]
     if (expr.length >= 2 && expr[1] is List) {
       final andOperations = expr[1] as List;
-      bool result = _evaluatePrimaryExpression(row, expr[0]);
+      bool result = _evaluatePrimaryExpression(row, expr[0], context);
 
       for (final op in andOperations) {
         if (op is List && op.length >= 4 && _containsString(op, 'AND')) {
           final rightExpr = op[3]; // The expression after AND
-          final rightResult = _evaluatePrimaryExpression(row, rightExpr);
+          final rightResult = _evaluatePrimaryExpression(
+            row,
+            rightExpr,
+            context,
+          );
           result = result && rightResult;
         }
       }
@@ -1778,10 +1974,14 @@ class PatternQuery<N extends Node> {
     }
 
     // Single expression (no AND)
-    return _evaluatePrimaryExpression(row, expr);
+    return _evaluatePrimaryExpression(row, expr, context);
   }
 
-  bool _evaluatePrimaryExpression(Map<String, String> row, dynamic expr) {
+  bool _evaluatePrimaryExpression(
+    Map<String, String> row,
+    dynamic expr,
+    _QueryContext context,
+  ) {
     if (expr is! List) return true;
     if (expr.isEmpty) return true;
 
@@ -1790,18 +1990,23 @@ class PatternQuery<N extends Node> {
       return _evaluateExpression(
         row,
         expr[2],
+        context,
       ); // Evaluate the content inside parentheses
     }
 
     // Check for comparison expressions: [property_expr, whitespace, operator, whitespace, value]
     if (expr.length == 5) {
-      return _evaluateComparisonExpression(row, expr);
+      return _evaluateComparisonExpression(row, expr, context);
     }
 
     return true;
   }
 
-  bool _evaluateComparisonExpression(Map<String, String> row, dynamic expr) {
+  bool _evaluateComparisonExpression(
+    Map<String, String> row,
+    dynamic expr,
+    _QueryContext context,
+  ) {
     if (expr is! List || expr.length != 5) return false;
 
     // Extract property expression (e.g., "person.age" or "type(r)")
@@ -1850,6 +2055,17 @@ class PatternQuery<N extends Node> {
     final variable = propMatch.group(1)!;
     final property = propMatch.group(2)!;
 
+    if (context.edgeBindings.containsKey(variable)) {
+      return _evaluateEdgePropertyComparison(
+        row,
+        variable,
+        property,
+        operatorStr,
+        valueStr,
+        context,
+      );
+    }
+
     // Get node ID from row
     final nodeId = row[variable];
     if (nodeId == null)
@@ -1881,6 +2097,55 @@ class PatternQuery<N extends Node> {
     final comparisonValue = _parseValue(valueStr);
 
     return _compareValues(propValue, operatorStr, comparisonValue);
+  }
+
+  bool _evaluateEdgePropertyComparison(
+    Map<String, String> row,
+    String edgeVar,
+    String property,
+    String operator,
+    String valueStr,
+    _QueryContext context,
+  ) {
+    final binding = context.edgeBindings[edgeVar];
+    if (binding == null) return false;
+
+    final fromId = row[binding.fromAlias];
+    final toId = row[binding.toAlias];
+    final edgeType = row[edgeVar];
+
+    if (fromId == null || toId == null || edgeType == null) return false;
+
+    final edgeProps = graph.edgeProperties(fromId, edgeType, toId);
+    final propValue = _readEdgeProperty(
+      fromId,
+      toId,
+      edgeType,
+      edgeProps,
+      property,
+    );
+    if (propValue == null) return false;
+
+    final comparisonValue = _parseValue(valueStr);
+    return _compareValues(propValue, operator, comparisonValue);
+  }
+
+  dynamic _resolveEdgePropertyValue(
+    Map<String, String> row,
+    String edgeVar,
+    String property,
+    _QueryContext context,
+  ) {
+    final binding = context.edgeBindings[edgeVar];
+    if (binding == null) return null;
+
+    final fromId = row[binding.fromAlias];
+    final toId = row[binding.toAlias];
+    final edgeType = row[edgeVar];
+    if (fromId == null || toId == null || edgeType == null) return null;
+
+    final edgeProps = graph.edgeProperties(fromId, edgeType, toId);
+    return _readEdgeProperty(fromId, toId, edgeType, edgeProps, property);
   }
 
   dynamic _parseValue(String valueStr) {
@@ -1998,6 +2263,24 @@ class _PropertyConstraint {
 }
 
 enum _PropertyOperator { equals, contains }
+
+class _EdgeVariableBinding {
+  const _EdgeVariableBinding({
+    required this.variable,
+    required this.fromAlias,
+    required this.toAlias,
+  });
+
+  final String variable;
+  final String fromAlias;
+  final String toAlias;
+}
+
+class _QueryContext {
+  const _QueryContext({this.edgeBindings = const {}});
+
+  final Map<String, _EdgeVariableBinding> edgeBindings;
+}
 
 class _OperatorMatch {
   const _OperatorMatch(this.index, this.operator);

@@ -1,3 +1,11 @@
+## 0.9.0
+
+- **Relationship properties**: Edges now carry property maps and serialize/deserialize them just like nodes via the new `Edge` model and adjacency storage.
+  - Inline pattern filters accept edge metadata: `MATCH a-[r:KNOWS {since: 2020}]->b`.
+  - `WHERE r.prop` and `RETURN r.prop` project/filter relationship fields (with backward hops supported).
+  - `matchPaths()` emits `PathEdge.properties`, so visual layers/layouts can understand edge metadata.
+- **Tests & docs**: Added `test/edge_storage_test.dart` and `test/edge_properties_test.dart` plus a TODO note (`docs/relationship_properties_todo.md`) capturing the remaining roadmap (variable-length filters, docs pass, etc.).
+
 ## 0.8.2
 
 - **Inline node property filters**: Node segments now accept property maps such as `group:Source{sourceKind:"asset", region~"west"}-[:HAS_POLICY]->policy:Policy`, covering built-ins (`id`, `label`, `type`) and any `Node.properties`.
