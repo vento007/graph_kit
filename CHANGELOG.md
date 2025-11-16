@@ -1,3 +1,11 @@
+## 0.10.0
+
+- Variable-length relationship segments now support the same property tooling as single hops: pattern filters, `WHERE r.prop`, `type(r)`, and `RETURN r.prop` (per-hop lists). `matchPaths()` reuses those hops so every `PathEdge` carries its real metadata.
+
+## 0.9.0
+
+- Relationship properties arrived: edges persist property maps, you can filter them inline or via `WHERE r.prop`, and `matchPaths()` exposes the metadata on each `PathEdge`.
+
 ## 0.8.2
 
 - **Inline node property filters**: Node segments now accept property maps such as `group:Source{sourceKind:"asset", region~"west"}-[:HAS_POLICY]->policy:Policy`, covering built-ins (`id`, `label`, `type`) and any `Node.properties`.

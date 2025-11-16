@@ -40,6 +40,7 @@ In-memory, typed directed multigraph with:
 
 - **Typed nodes** (e.g., `Person`, `Team`, `Project`, `Resource`)
 - **Typed edges** (e.g., `WORKS_FOR`, `MANAGES`, `ASSIGNED_TO`, `DEPENDS_ON`)
+- **Relationship properties** for weights, timestamps, metadata, and inline filtering
 - **Multiple relationships** between the same nodes
 - **Advanced Cypher queries** with WHERE clauses, RETURN projection, logical operators, variable-length paths, and edge variable comparison
 - **Complete path results** with Neo4j-style edge information
@@ -50,6 +51,9 @@ In-memory, typed directed multigraph with:
 - [1. Quick Preview](#1-quick-preview)
 - [2. Complete Usage Examples](#2-complete-usage-examples)
   - [2.9 RETURN Clause - Property Projection](#29-return-clause---property-projection)
+  - [2.10 Relationship Properties](#210-relationship-properties)
+  - [2.11 Utility Methods](#211-utility-methods)
+  - [2.12 Summary of Query Methods](#212-summary-of-query-methods)
 - [3. Graph Algorithms](#3-graph-algorithms)
 - [4. Generic Traversal Utilities](#4-generic-traversal-utilities)
 - [5. Pattern Query Examples](#5-pattern-query-examples)
@@ -531,7 +535,59 @@ flutter run
 # Select "RETURN Clause Projection" to see live examples
 ```
 
-### 2.10 Utility Methods
+### 2.10 Relationship Properties
+
+Edges can store weights, timestamps, or workflow metadata via the optional `properties` parameter on `graph.addEdge`:
+
+```dart
+graph.addEdge(
+  'alice',
+  'KNOWS',
+  'bob',
+  properties: {'since': 2020, 'strength': 90},
+);
+
+graph.addEdge(
+  'alice',
+  'KNOWS',
+  'carol',
+  properties: {'since': 2018, 'strength': 50},
+);
+```
+
+Use relationship properties the same way you use node fields:
+
+```dart
+// Inline filters on relationship metadata (forward/backward)
+final peers = query.matchRows(
+  'MATCH person-[r:KNOWS {since: 2020}]->friend',
+);
+final mentorships = query.matchRows(
+  'MATCH mentee<-[:MENTORS {since: 2021}]-mentor',
+);
+
+// WHERE clause targeting relationship properties
+final strongConnections = query.matchRows(
+  'MATCH person-[r:KNOWS]->friend WHERE r.strength >= 80',
+);
+
+// RETURN clause projecting relationship properties
+final enriched = query.matchRows(
+  'MATCH person-[r:KNOWS]->friend '
+  'RETURN person, friend, r.since AS since, r.strength',
+);
+
+// matchPaths includes edge metadata in PathEdge.properties
+final paths = query.matchPaths(
+  'mentor<-[:MENTORS {since: 2021}]-mentee'
+  '         -[:COACHES*1..2 {focus: "onboarding"}]->apprentice',
+);
+print(paths.first.edges.first.properties); // {since: 2021}
+```
+
+> **Heads up:** Variable-length edge variables now support inline `{...}` filters, `WHERE r.prop`, `type(r)` comparisons, and `RETURN r.prop` projections (returned as per-hop lists). The only remaining limitation is `matchPaths()` with `RETURN` clauses that exclude edge variables—you still get full path metadata, but edges omitted from the RETURN projection won’t appear in `PathMatch.nodes`.
+
+### 2.11 Utility Methods
 
 ```dart
 // Find by type, query.findByType returns Set<String>
@@ -555,7 +611,7 @@ final engineeringWorkers = query.inTo('engineering', 'WORKS_FOR');
 print(engineeringWorkers); // {alice, bob}
 ```
 
-### 2.11 Summary of Query Methods
+### 2.12 Summary of Query Methods
 
 | Method | Returns | Use Case |
 |--------|---------|----------|
