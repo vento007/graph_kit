@@ -962,7 +962,7 @@ class PatternQuery<N extends Node> {
           final isVariableLengthEdge =
               _extractVariableLengthSpec(edgeInfo) != null;
 
-          if (edgeVar != null && currentAlias != null && nextAlias != null) {
+          if (edgeVar != null && currentAlias != null) {
             final fromAlias = isForward ? currentAlias : nextAlias;
             final toAlias = isForward ? nextAlias : currentAlias;
             edgeBindings[edgeVar] = _EdgeVariableBinding(
@@ -1661,8 +1661,9 @@ class PatternQuery<N extends Node> {
       final fromVar = _extractVariableName(fromPart);
       final toVar = _extractVariableName(toPart);
       if (fromVar == null || toVar == null) return const <List<PathEdge>>[];
-      if (!row.containsKey(fromVar) || !row.containsKey(toVar))
+      if (!row.containsKey(fromVar) || !row.containsKey(toVar)) {
         return const <List<PathEdge>>[];
+      }
 
       final edgePart = isForward ? fromPart : toPart;
       var edgeTypes = _edgeTypeFrom(edgePart);
@@ -1674,8 +1675,9 @@ class PatternQuery<N extends Node> {
           edgeTypes = [boundType];
         }
       }
-      if (edgeTypes == null || edgeTypes.isEmpty)
+      if (edgeTypes == null || edgeTypes.isEmpty) {
         return const <List<PathEdge>>[];
+      }
 
       final vlSpec = _extractVariableLengthSpec(edgePart);
       final newSequences = <List<PathEdge>>[];
@@ -2379,8 +2381,9 @@ class PatternQuery<N extends Node> {
 
     // Get node ID from row
     final nodeId = row[variable];
-    if (nodeId == null)
+    if (nodeId == null) {
       return false; // Variable doesn't exist in row should fail
+    }
 
     // Get node from graph
     final node = graph.nodesById[nodeId];
