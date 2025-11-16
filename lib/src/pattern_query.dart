@@ -9,6 +9,7 @@ import 'node.dart';
 class PatternQuery<N extends Node> {
   final Graph<N> graph;
   late final Parser _parser;
+  _VariableLengthTraceStore? _lastVariableLengthTraceStore;
 
   PatternQuery(this.graph) {
     final definition = CypherPatternGrammar();
@@ -24,6 +25,7 @@ class PatternQuery<N extends Node> {
     String? startId,
     List<String>? startIds,
     String? startType,
+    bool includeInternalMetadata = false,
   }) {
     final result = _parser.parse(pattern);
     if (result is Failure) {
@@ -100,7 +102,12 @@ class PatternQuery<N extends Node> {
 
     if (parts.isEmpty) return const <Map<String, dynamic>>[];
 
-    final queryContext = _QueryContext(edgeBindings: edgeBindings);
+    final traceStore = _VariableLengthTraceStore();
+    _lastVariableLengthTraceStore = traceStore;
+    final queryContext = _QueryContext(
+      edgeBindings: edgeBindings,
+      traceStore: traceStore,
+    );
 
     // Seed rows (copied logic from original)
     List<Map<String, String>> currentRows = <Map<String, String>>[];
@@ -162,6 +169,7 @@ class PatternQuery<N extends Node> {
             i,
             nodeMetadata,
             edgeConstraints,
+            traceStore,
           );
           allRows.addAll(results);
         }
@@ -171,10 +179,8 @@ class PatternQuery<N extends Node> {
       final seen = <String>{};
       currentRows = [];
       for (final row in allRows) {
-        final sortedKeys = row.keys.toList()..sort();
-        final key = sortedKeys.map((k) => '$k:${row[k]}').join(',');
-        if (!seen.contains(key)) {
-          seen.add(key);
+        final key = _rowSignature(row);
+        if (seen.add(key)) {
           currentRows.add(row);
         }
       }
@@ -204,7 +210,7 @@ class PatternQuery<N extends Node> {
             ? edgeConstraints[i]
             : const <_PropertyConstraint>[];
 
-        // Check if this is a variable-length relationship
+        final edgeVar = edgeVars[i];
         final variableLengthSpec = _extractVariableLengthSpec(edgePart);
         if (variableLengthSpec != null) {
           // Handle variable-length relationship using enumeratePaths
@@ -217,11 +223,13 @@ class PatternQuery<N extends Node> {
             isForward,
             constraintsForEdge,
             nodeMetadata,
+            traceStore,
+            i,
+            edgeVar,
           );
           currentRows = vlResults;
         } else {
           // Handle single-hop relationship (existing logic)
-          final edgeVar = edgeVars[i];
           currentRows = _executeSingleHopSegment(
             currentRows,
             aliasHere,
@@ -249,7 +257,12 @@ class PatternQuery<N extends Node> {
     }
 
     // Backward compatibility: no RETURN clause returns all variables
-    return currentRows.map((row) => row.cast<String, dynamic>()).toList();
+    return currentRows.map((row) {
+      final outputRow = includeInternalMetadata
+          ? Map<String, String>.from(row)
+          : _rowWithoutInternalKeys(row);
+      return outputRow.cast<String, dynamic>();
+    }).toList();
   }
 
   /// Executes pattern from a specific position bidirectionally
@@ -262,6 +275,7 @@ class PatternQuery<N extends Node> {
     int startIndex,
     Map<String, _NodePatternMetadata> nodeMetadata,
     List<List<_PropertyConstraint>> edgeConstraints,
+    _VariableLengthTraceStore traceStore,
   ) {
     var currentRows = seedRows;
 
@@ -288,6 +302,7 @@ class PatternQuery<N extends Node> {
       final isForward = !isForwardInPattern;
 
       // Check for variable-length
+      final edgeVar = edgeVars[i];
       final variableLengthSpec = _extractVariableLengthSpec(edgePart);
       if (variableLengthSpec != null) {
         currentRows = _executeVariableLengthSegment(
@@ -299,9 +314,11 @@ class PatternQuery<N extends Node> {
           isForward,
           constraintsForEdge,
           nodeMetadata,
+          traceStore,
+          i,
+          edgeVar,
         );
       } else {
-        final edgeVar = edgeVars[i];
         currentRows = _executeSingleHopSegment(
           currentRows,
           aliasHere,
@@ -336,6 +353,7 @@ class PatternQuery<N extends Node> {
           : const <_PropertyConstraint>[];
 
       // Check for variable-length
+      final edgeVar = edgeVars[i];
       final variableLengthSpec = _extractVariableLengthSpec(edgePart);
       if (variableLengthSpec != null) {
         currentRows = _executeVariableLengthSegment(
@@ -347,9 +365,11 @@ class PatternQuery<N extends Node> {
           isForward,
           constraintsForEdge,
           nodeMetadata,
+          traceStore,
+          i,
+          edgeVar,
         );
       } else {
-        final edgeVar = edgeVars[i];
         currentRows = _executeSingleHopSegment(
           currentRows,
           aliasHere,
@@ -424,8 +444,7 @@ class PatternQuery<N extends Node> {
             newRow[edgeVar] =
                 edgeType; // Bind edge variable to actual edge type
           }
-          final keys = newRow.keys.toList()..sort();
-          final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
+          final sig = _rowSignature(newRow);
           if (seen.add(sig)) {
             nextRows.add(newRow);
           }
@@ -447,32 +466,46 @@ class PatternQuery<N extends Node> {
     bool isForward,
     List<_PropertyConstraint> edgeConstraints,
     Map<String, _NodePatternMetadata> nodeMetadata,
+    _VariableLengthTraceStore traceStore,
+    int connectionIndex,
+    String? edgeVar,
   ) {
     final nextRows = <Map<String, String>>[];
     final seen = <String>{};
+    final metadataKey = _variableLengthMetadataKey(connectionIndex);
 
     for (final row in currentRows) {
       final srcId = row[aliasHere];
       if (srcId == null) continue;
 
-      // Find all possible destinations within hop limits, matching allowed types
-      final destinations = _findVariableLengthDestinations(
+      final matches = _findVariableLengthMatches(
         srcId,
         edgeTypes,
         vlSpec,
         isForward,
         edgeConstraints,
+        aliasHere,
+        nextAlias,
       );
 
-      for (final destId in destinations) {
-        if (!_nodeMatchesConstraints(nextAlias, destId, nodeMetadata)) {
+      for (final match in matches) {
+        if (!_nodeMatchesConstraints(
+          nextAlias,
+          match.destinationId,
+          nodeMetadata,
+        )) {
           continue;
         }
         final newRow = Map<String, String>.from(row);
-        newRow[nextAlias] = destId;
-        final keys = newRow.keys.toList()..sort();
-        final sig = keys.map((k) => '$k=${newRow[k]}').join('|');
+        newRow[nextAlias] = match.destinationId;
+
+        final sig = _rowSignature(newRow);
         if (seen.add(sig)) {
+          final traceId = traceStore.store(match.edges);
+          newRow[metadataKey] = traceId;
+          if (edgeVar != null) {
+            newRow.remove(edgeVar); // ensure no stale data
+          }
           nextRows.add(newRow);
         }
       }
@@ -481,75 +514,169 @@ class PatternQuery<N extends Node> {
     return nextRows;
   }
 
-  /// Finds all destinations reachable via variable-length paths
-  Set<String> _findVariableLengthDestinations(
+  /// Finds all variable-length matches including hop metadata.
+  List<_VariableLengthMatch> _findVariableLengthMatches(
     String srcId,
     List<String> edgeTypes,
     VariableLengthSpec vlSpec,
     bool isForward,
     List<_PropertyConstraint> edgeConstraints,
+    String aliasHere,
+    String nextAlias,
   ) {
-    final destinations = <String>{};
+    final matches = <_VariableLengthMatch>[];
     final maxHops = vlSpec.effectiveMaxHops;
     final minHops = vlSpec.effectiveMinHops;
     final matchAllEdgeTypes = edgeTypes.isEmpty;
 
-    // Use breadth-first search to find all reachable nodes within hop limits
-    final queue = <({String nodeId, int hops})>[];
-    final visited = <String, int>{}; // node -> minimum hops to reach it
+    final queue = <({String nodeId, int hops, List<PathEdge> path})>[];
+    final visited = <String, int>{};
 
-    queue.add((nodeId: srcId, hops: 0));
+    queue.add((nodeId: srcId, hops: 0, path: <PathEdge>[]));
     visited[srcId] = 0;
 
     while (queue.isNotEmpty) {
       final current = queue.removeAt(0);
 
-      // If we've reached the minimum hops, this is a valid destination
       if (current.hops >= minHops && current.nodeId != srcId) {
-        destinations.add(current.nodeId);
+        matches.add(
+          _VariableLengthMatch(
+            destinationId: current.nodeId,
+            edges: List<PathEdge>.unmodifiable(current.path),
+          ),
+        );
       }
 
-      // Continue exploring if we haven't reached max hops
-      if (current.hops < maxHops) {
-        final adjacency = isForward ? graph.out[current.nodeId] : graph.inn[current.nodeId];
-        if (adjacency == null || adjacency.isEmpty) {
+      if (current.hops >= maxHops) {
+        continue;
+      }
+
+      final adjacency =
+          isForward ? graph.out[current.nodeId] : graph.inn[current.nodeId];
+      if (adjacency == null || adjacency.isEmpty) {
+        continue;
+      }
+
+      final typesToExplore =
+          matchAllEdgeTypes ? adjacency.keys : edgeTypes;
+
+      for (final edgeType in typesToExplore) {
+        if (!matchAllEdgeTypes && adjacency[edgeType] == null) {
           continue;
         }
+        final neighbors = isForward
+            ? graph.outNeighbors(current.nodeId, edgeType)
+            : graph.inNeighbors(current.nodeId, edgeType);
+        if (neighbors.isEmpty) continue;
 
-        final typesToExplore =
-            matchAllEdgeTypes ? adjacency.keys : edgeTypes;
-
-        for (final edgeType in typesToExplore) {
-          final neighbors = isForward
-              ? graph.outNeighbors(current.nodeId, edgeType)
-              : graph.inNeighbors(current.nodeId, edgeType);
-
-          if (neighbors.isEmpty) continue;
-
-          for (final neighbor in neighbors) {
-            if (!_edgeMatchesConstraints(
-              current.nodeId,
-              neighbor,
-              edgeType,
-              isForward,
-              edgeConstraints,
-            )) {
-              continue;
-            }
-
-            final newHops = current.hops + 1;
-            final previous = visited[neighbor];
-            if (previous != null && previous <= newHops) {
-              continue;
-            }
-            visited[neighbor] = newHops;
-            queue.add((nodeId: neighbor, hops: newHops));
+        for (final neighbor in neighbors) {
+          if (!_edgeMatchesConstraints(
+            current.nodeId,
+            neighbor,
+            edgeType,
+            isForward,
+            edgeConstraints,
+          )) {
+            continue;
           }
+
+          final newHops = current.hops + 1;
+          final previous = visited[neighbor];
+          if (previous != null && previous <= newHops) {
+            continue;
+          }
+          visited[neighbor] = newHops;
+
+          final actualSource = isForward ? current.nodeId : neighbor;
+          final actualTarget = isForward ? neighbor : current.nodeId;
+          final fromVar = isForward ? aliasHere : nextAlias;
+          final toVar = isForward ? nextAlias : aliasHere;
+          final edgeProps = graph.edgeProperties(
+            actualSource,
+            edgeType,
+            actualTarget,
+          );
+          final hopEdge = PathEdge(
+            from: actualSource,
+            to: actualTarget,
+            type: edgeType,
+            fromVariable: fromVar,
+            toVariable: toVar,
+            properties: edgeProps,
+          );
+
+          final nextPath = List<PathEdge>.from(current.path)..add(hopEdge);
+          queue.add((nodeId: neighbor, hops: newHops, path: nextPath));
         }
       }
     }
 
-    return destinations;
+    return matches;
+  }
+
+  static const String _kVariableLengthMetadataPrefix = '__graphkit_vl__segment_';
+
+  String _variableLengthMetadataKey(int connectionIndex) =>
+      '$_kVariableLengthMetadataPrefix$connectionIndex';
+
+  bool _isInternalKey(String key) => key.startsWith(_kVariableLengthMetadataPrefix);
+
+  Map<String, String> _rowWithoutInternalKeys(Map<String, String> row) {
+    final clean = <String, String>{};
+    row.forEach((key, value) {
+      if (!_isInternalKey(key)) {
+        clean[key] = value;
+      }
+    });
+    return clean;
+  }
+
+  String _rowSignature(Map<String, String> row) {
+    final keys = row.keys.where((key) => !_isInternalKey(key)).toList()..sort();
+    return keys.map((k) => '$k=${row[k]}').join('|');
+  }
+
+  String _dynamicRowSignature(Map<String, dynamic> row) {
+    final keys = row.keys.where((key) => !_isInternalKey(key)).toList()..sort();
+    return keys.map((k) => '$k=${row[k]}').join('|');
+  }
+
+  List<PathEdge>? _lookupVariableLengthEdges(
+    Map<String, String> row,
+    _EdgeVariableBinding binding,
+    _QueryContext context,
+  ) {
+    final traceKey = _variableLengthMetadataKey(binding.connectionIndex);
+    final traceId = row[traceKey];
+    if (traceId == null) return null;
+    return context.traceStore?.lookup(traceId);
+  }
+
+  bool _compareVariableLengthTypeLists(
+    List<String> left,
+    List<String> right,
+    String operator,
+  ) {
+    switch (operator) {
+      case '=':
+        if (left.length != right.length) return false;
+        for (var i = 0; i < left.length; i++) {
+          if (!_compareValues(left[i], '=', right[i])) {
+            return false;
+          }
+        }
+        return true;
+      case '!=':
+        if (left.length != right.length) return true;
+        for (var i = 0; i < left.length; i++) {
+          if (!_compareValues(left[i], '=', right[i])) {
+            return true;
+          }
+        }
+        return false;
+      default:
+        return false;
+    }
   }
 
   Map<String, Set<String>> match(
@@ -590,6 +717,7 @@ class PatternQuery<N extends Node> {
         startId: startId,
         startIds: startIds,
         startType: startType,
+        includeInternalMetadata: true,
       );
       final pathMatches = <PathMatch>[];
 
@@ -620,7 +748,7 @@ class PatternQuery<N extends Node> {
         // Filter out edge variables when creating PathMatch nodes
         final nodeIds = <String, String>{};
         for (final entry in fullRow.entries) {
-          if (!edgeVarNames.contains(entry.key)) {
+          if (!edgeVarNames.contains(entry.key) && !_isInternalKey(entry.key)) {
             nodeIds[entry.key] = entry.value;
           }
         }
@@ -638,6 +766,7 @@ class PatternQuery<N extends Node> {
       pattern,
       startId: startId,
       startIds: startIds,
+      includeInternalMetadata: true,
     );
     final patternWithoutReturn = pattern.replaceAll(
       RegExp(r'\s+RETURN\s+.+$', caseSensitive: false),
@@ -647,6 +776,7 @@ class PatternQuery<N extends Node> {
       patternWithoutReturn,
       startId: startId,
       startIds: startIds,
+      includeInternalMetadata: true,
     );
 
     // Extract edge variables to filter them out
@@ -683,7 +813,7 @@ class PatternQuery<N extends Node> {
       // Filter out edge variables when creating PathMatch nodes
       final filteredIds = <String, String>{};
       for (final entry in filteredFullRow.entries) {
-        if (!edgeVarNames.contains(entry.key)) {
+        if (!edgeVarNames.contains(entry.key) && !_isInternalKey(entry.key)) {
           filteredIds[entry.key] = entry.value;
         }
       }
@@ -781,6 +911,17 @@ class PatternQuery<N extends Node> {
         .toList();
   }
 
+  /// Visible for tests: resolve stored variable-length edges for a row.
+  List<PathEdge>? extractVariableLengthPathForTesting(
+    Map<String, dynamic> row, {
+    required int connectionIndex,
+  }) {
+    final traceKey = _variableLengthMetadataKey(connectionIndex);
+    final rawValue = row[traceKey];
+    if (rawValue is! String) return null;
+    return _lastVariableLengthTraceStore?.lookup(rawValue);
+  }
+
   void _extractPartsFromParseTree(
     dynamic parseTree,
     List<String> parts,
@@ -803,6 +944,7 @@ class PatternQuery<N extends Node> {
         if (connectionPair is List && connectionPair.length >= 2) {
           final connection = connectionPair[0];
           final segment = connectionPair[1];
+          final connectionIndex = edgeVars.length;
 
           // Determine direction from connection
           final connectionStr = _flattenConnection(connection);
@@ -816,6 +958,9 @@ class PatternQuery<N extends Node> {
           final currentAlias = parts.isNotEmpty ? _aliasOf(parts.last) : null;
           final flattenedSegment = _flattenSegment(segment, nodeMetadata);
           final nextAlias = _aliasOf(flattenedSegment);
+          final edgeInfo = _extractEdgeFromConnection(connection);
+          final isVariableLengthEdge =
+              _extractVariableLengthSpec(edgeInfo) != null;
 
           if (edgeVar != null && currentAlias != null && nextAlias != null) {
             final fromAlias = isForward ? currentAlias : nextAlias;
@@ -824,11 +969,12 @@ class PatternQuery<N extends Node> {
               variable: edgeVar,
               fromAlias: fromAlias,
               toAlias: toAlias,
+              connectionIndex: connectionIndex,
+              isVariableLength: isVariableLengthEdge,
             );
           }
 
           // Add edge info to the appropriate part based on direction
-          final edgeInfo = _extractEdgeFromConnection(connection);
           edgeConstraints.add(_edgeConstraintsFromInfo(edgeInfo));
 
           if (isForward) {
@@ -870,17 +1016,14 @@ class PatternQuery<N extends Node> {
   /// Extracts edge variable name from connection like [r] or [r:TYPE]
   String? _extractEdgeVariable(dynamic connection) {
     final connectionStr = _flattenToString(connection);
-    // Match patterns like [r], [r:TYPE], [r:TYPE*1..3]
-    // We want to capture just the variable name before : or ]
-    final match = RegExp(r'\[(\w+)(?:[:\]]|$)').firstMatch(connectionStr);
+    // Match patterns like [r], [r:TYPE], [r*1..3], [r:TYPE*1..3]
+    final match = RegExp(r'\[(\w+)(?=[\]:*])').firstMatch(connectionStr);
     return match?.group(1);
   }
 
   /// Extracts edge variable name from a string segment like "n[r:TYPE]"
   String? _extractEdgeVariableFromString(String segment) {
-    // Match patterns like [r], [r:TYPE], [r:TYPE*1..3]
-    // We want to capture just the variable name before : or ]
-    final match = RegExp(r'\[(\w+)(?:[:\]]|$)').firstMatch(segment);
+    final match = RegExp(r'\[(\w+)(?=[\]:*])').firstMatch(segment);
     return match?.group(1);
   }
 
@@ -1508,6 +1651,7 @@ class PatternQuery<N extends Node> {
     }
 
     var sequences = <List<PathEdge>>[<PathEdge>[]];
+    var connectionIndex = 0;
 
     for (int si = 0; si < directions.length; si++) {
       final fromPart = parts[si];
@@ -1535,6 +1679,9 @@ class PatternQuery<N extends Node> {
 
       final vlSpec = _extractVariableLengthSpec(edgePart);
       final newSequences = <List<PathEdge>>[];
+
+      final metadataKey = _variableLengthMetadataKey(connectionIndex);
+      connectionIndex++;
 
       if (vlSpec == null) {
         final fromId = isForward ? row[fromVar]! : row[toVar]!;
@@ -1574,18 +1721,29 @@ class PatternQuery<N extends Node> {
           newSequences.add(next);
         }
       } else {
-        final startId = isForward ? row[fromVar]! : row[toVar]!;
-        final endId = isForward ? row[toVar]! : row[fromVar]!;
+        final traceId = row[metadataKey];
+        List<List<PathEdge>> vlSequences;
+        if (traceId != null) {
+          final stored = _lastVariableLengthTraceStore?.lookup(traceId);
+          if (stored != null) {
+            vlSequences = [List<PathEdge>.from(stored)];
+          } else {
+            vlSequences = const [];
+          }
+        } else {
+          final startId = isForward ? row[fromVar]! : row[toVar]!;
+          final endId = isForward ? row[toVar]! : row[fromVar]!;
 
-        final vlSequences = _enumerateVariableLengthEdgeSequences(
-          fromId: startId,
-          toId: endId,
-          edgeTypes: edgeTypes,
-          spec: vlSpec,
-          isForward: isForward,
-          fromVariable: fromVar,
-          toVariable: toVar,
-        );
+          vlSequences = _enumerateVariableLengthEdgeSequences(
+            fromId: startId,
+            toId: endId,
+            edgeTypes: edgeTypes,
+            spec: vlSpec,
+            isForward: isForward,
+            fromVariable: fromVar,
+            toVariable: toVar,
+          );
+        }
 
         if (vlSequences.isEmpty) return const <List<PathEdge>>[];
 
@@ -1794,8 +1952,7 @@ class PatternQuery<N extends Node> {
     for (final p in patterns) {
       final rows = matchRows(p, startId: startId, startIds: startIds);
       for (final r in rows) {
-        final keys = r.keys.toList()..sort();
-        final sig = keys.map((k) => '$k=${r[k]}').join('|');
+        final sig = _dynamicRowSignature(r);
         if (seen.add(sig)) out.add(r);
       }
     }
@@ -1931,7 +2088,8 @@ class PatternQuery<N extends Node> {
     // Validate: check that all requested variables exist (use first row as sample)
     if (rows.isNotEmpty) {
       final sampleRow = rows.first;
-      final availableVars = sampleRow.keys.toSet();
+      final availableVars = sampleRow.keys.toSet()
+        ..addAll(context.edgeBindings.keys);
 
       for (final item in returnItems) {
         final varName = item.sourceVariable;
@@ -2130,27 +2288,73 @@ class PatternQuery<N extends Node> {
       r'type\s*\(\s*(\w+)\s*\)',
     ).firstMatch(propertyStr);
     if (typeFuncMatch != null) {
-      // This is a type(r) function - get the edge type from the row
       final variable = typeFuncMatch.group(1)!;
-      final propValue = row[variable];
-      if (propValue == null) return false; // Variable doesn't exist in row
+      final binding = context.edgeBindings[variable];
+      if (binding == null) return false;
 
       // Check if RIGHT side is ALSO a type(variable) function (variable-to-variable comparison)
       final rightTypeFuncMatch = RegExp(
         r'type\s*\(\s*(\w+)\s*\)',
       ).firstMatch(valueStr);
-      if (rightTypeFuncMatch != null) {
-        // Variable-to-variable comparison: type(r2) = type(r)
-        final rightVariable = rightTypeFuncMatch.group(1)!;
-        final rightValue = row[rightVariable];
-        if (rightValue == null)
-          return false; // Right variable doesn't exist in row
 
-        // Compare the two edge types
+      if (binding.isVariableLength) {
+        final edges = _lookupVariableLengthEdges(row, binding, context);
+        if (edges == null || edges.isEmpty) return false;
+        final leftTypes = edges.map((edge) => edge.type).toList();
+
+        if (rightTypeFuncMatch != null) {
+          final rightVariable = rightTypeFuncMatch.group(1)!;
+          final rightBinding = context.edgeBindings[rightVariable];
+          if (rightBinding == null) return false;
+
+          if (rightBinding.isVariableLength) {
+            final rightEdges =
+                _lookupVariableLengthEdges(row, rightBinding, context);
+            if (rightEdges == null || rightEdges.isEmpty) return false;
+            final rightTypes = rightEdges.map((edge) => edge.type).toList();
+            return _compareVariableLengthTypeLists(
+              leftTypes,
+              rightTypes,
+              operatorStr,
+            );
+          }
+
+          final rightValue = row[rightVariable];
+          if (rightValue == null) return false;
+          return leftTypes.every(
+            (type) => _compareValues(type, operatorStr, rightValue),
+          );
+        }
+
+        final comparisonValue = _parseValue(valueStr);
+        return leftTypes.every(
+          (type) => _compareValues(type, operatorStr, comparisonValue),
+        );
+      }
+
+      final propValue = row[variable];
+      if (propValue == null) return false; // Variable doesn't exist in row
+
+      if (rightTypeFuncMatch != null) {
+        final rightVariable = rightTypeFuncMatch.group(1)!;
+        final rightBinding = context.edgeBindings[rightVariable];
+        if (rightBinding == null) return false;
+
+        if (rightBinding.isVariableLength) {
+          final rightEdges =
+              _lookupVariableLengthEdges(row, rightBinding, context);
+          if (rightEdges == null || rightEdges.isEmpty) return false;
+          final rightTypes = rightEdges.map((edge) => edge.type).toList();
+          return rightTypes.every(
+            (type) => _compareValues(type, operatorStr, propValue),
+          );
+        }
+
+        final rightValue = row[rightVariable];
+        if (rightValue == null) return false;
         return _compareValues(propValue, operatorStr, rightValue);
       }
 
-      // Right side is a literal value
       final comparisonValue = _parseValue(valueStr);
       return _compareValues(propValue, operatorStr, comparisonValue);
     }
@@ -2217,6 +2421,27 @@ class PatternQuery<N extends Node> {
     final binding = context.edgeBindings[edgeVar];
     if (binding == null) return false;
 
+    final comparisonValue = _parseValue(valueStr);
+
+    if (binding.isVariableLength) {
+      final edges = _lookupVariableLengthEdges(row, binding, context);
+      if (edges == null || edges.isEmpty) return false;
+      for (final edge in edges) {
+        final propValue = _readEdgeProperty(
+          edge.from,
+          edge.to,
+          edge.type,
+          edge.properties,
+          property,
+        );
+        if (propValue == null ||
+            !_compareValues(propValue, operator, comparisonValue)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
     final fromId = row[binding.fromAlias];
     final toId = row[binding.toAlias];
     final edgeType = row[edgeVar];
@@ -2233,7 +2458,6 @@ class PatternQuery<N extends Node> {
     );
     if (propValue == null) return false;
 
-    final comparisonValue = _parseValue(valueStr);
     return _compareValues(propValue, operator, comparisonValue);
   }
 
@@ -2245,6 +2469,22 @@ class PatternQuery<N extends Node> {
   ) {
     final binding = context.edgeBindings[edgeVar];
     if (binding == null) return null;
+
+    if (binding.isVariableLength) {
+      final edges = _lookupVariableLengthEdges(row, binding, context);
+      if (edges == null || edges.isEmpty) return null;
+      return edges
+          .map(
+            (edge) => _readEdgeProperty(
+              edge.from,
+              edge.to,
+              edge.type,
+              edge.properties,
+              property,
+            ),
+          )
+          .toList();
+    }
 
     final fromId = row[binding.fromAlias];
     final toId = row[binding.toAlias];
@@ -2376,17 +2616,25 @@ class _EdgeVariableBinding {
     required this.variable,
     required this.fromAlias,
     required this.toAlias,
+    required this.connectionIndex,
+    required this.isVariableLength,
   });
 
   final String variable;
   final String fromAlias;
   final String toAlias;
+  final int connectionIndex;
+  final bool isVariableLength;
 }
 
 class _QueryContext {
-  const _QueryContext({this.edgeBindings = const {}});
+  const _QueryContext({
+    this.edgeBindings = const {},
+    this.traceStore,
+  });
 
   final Map<String, _EdgeVariableBinding> edgeBindings;
+  final _VariableLengthTraceStore? traceStore;
 }
 
 class _OperatorMatch {
@@ -2394,4 +2642,27 @@ class _OperatorMatch {
 
   final int index;
   final _PropertyOperator operator;
+}
+
+class _VariableLengthTraceStore {
+  final Map<String, List<PathEdge>> _entries = {};
+  int _counter = 0;
+
+  String store(List<PathEdge> edges) {
+    final id = '__graphkit_vl_trace_${_counter++}';
+    _entries[id] = List<PathEdge>.unmodifiable(edges);
+    return id;
+  }
+
+  List<PathEdge>? lookup(String id) => _entries[id];
+}
+
+class _VariableLengthMatch {
+  const _VariableLengthMatch({
+    required this.destinationId,
+    required this.edges,
+  });
+
+  final String destinationId;
+  final List<PathEdge> edges;
 }

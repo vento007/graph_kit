@@ -1,10 +1,10 @@
+## 0.10.0
+
+- Variable-length relationship segments now support the same property tooling as single hops: pattern filters, `WHERE r.prop`, `type(r)`, and `RETURN r.prop` (per-hop lists). `matchPaths()` reuses those hops so every `PathEdge` carries its real metadata.
+
 ## 0.9.0
 
-- **Relationship properties**: Edges now carry property maps and serialize/deserialize them just like nodes via the new `Edge` model and adjacency storage.
-  - Inline pattern filters accept edge metadata: `MATCH a-[r:KNOWS {since: 2020}]->b`.
-  - `WHERE r.prop` and `RETURN r.prop` project/filter relationship fields (with backward hops supported).
-  - `matchPaths()` emits `PathEdge.properties`, so visual layers/layouts can understand edge metadata.
-- **Tests & docs**: Added `test/edge_storage_test.dart` and `test/edge_properties_test.dart` plus a TODO note (`docs/relationship_properties_todo.md`) capturing the remaining roadmap (variable-length filters, docs pass, etc.).
+- Relationship properties arrived: edges persist property maps, you can filter them inline or via `WHERE r.prop`, and `matchPaths()` exposes the metadata on each `PathEdge`.
 
 ## 0.8.2
 

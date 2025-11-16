@@ -227,5 +227,121 @@ void main() {
       expect(contacts, containsAll({'partner', 'advocate'}));
       expect(contacts, isNot(contains('vendor')));
     });
+
+    test('WHERE clause can reference edge variables on variable-length segments',
+        () {
+      final rows = query.matchRows(
+        'MATCH ceo:Person{id:"ceo"}-[r:MANAGES*1..2]->target:Person '
+        'WHERE r.priority = "high"',
+      );
+
+      final targets = rows.map((row) => row['target']).toSet();
+      expect(targets, containsAll({'directorHigh', 'engineer1'}));
+      expect(targets, isNot(contains('directorLow')));
+      expect(targets, isNot(contains('engineer2')));
+    });
+
+    test('WHERE clause works for backward variable-length edge variables', () {
+      final rows = query.matchRows(
+        'MATCH ceo:Person{id:"ceo"}<-'
+        '[r:REPORTS_TO*1..2]-report '
+        'WHERE r.priority = "high"',
+      );
+
+      final reporters = rows.map((row) => row['report']).toSet();
+      expect(reporters, containsAll({'directorHigh', 'engineer1'}));
+      expect(reporters, isNot(contains('directorLow')));
+      expect(reporters, isNot(contains('engineer2')));
+    });
+
+    test('WHERE clause supports wildcard variable-length edge variables', () {
+      final rows = query.matchRows(
+        'MATCH ceo:Person{id:"ceo"}-[r*1..2]->contact:Person '
+        'WHERE r.tag = "vip"',
+      );
+
+      final contacts = rows.map((row) => row['contact']).toSet();
+      expect(contacts, containsAll({'partner', 'advocate'}));
+      expect(contacts, isNot(contains('vendor')));
+    });
+
+    test('WHERE clause supports type() on variable-length edge variables', () {
+      final rows = query.matchRows(
+        'MATCH ceo:Person{id:"ceo"}-[r*1..2]->person '
+        'WHERE type(r) = "MANAGES"',
+      );
+
+      final matched = rows.map((row) => row['person']).toSet();
+      expect(
+        matched,
+        containsAll(['directorHigh', 'directorLow', 'engineer1', 'engineer2']),
+      );
+      expect(matched, isNot(contains('partner')));
+    });
+
+    test('RETURN projects property lists for variable-length edge variables',
+        () {
+      final rows = query.matchRows(
+        'MATCH ceo:Person{id:"ceo"}-[r:MANAGES*1..2]->target '
+        'RETURN target.id AS targetId, r.priority AS hops',
+      );
+
+      final lookup = {
+        for (final row in rows) row['targetId'] as String: row['hops']
+      };
+
+      expect(lookup['directorHigh'], equals(['high']));
+      expect(lookup['engineer1'], equals(['high', 'high']));
+      expect(lookup['engineer2'], equals(['high', 'low']));
+    });
+
+    test('captures hop metadata for variable-length segments', () {
+      final rows = query.matchRows(
+        'MATCH ceo:Person{id:"ceo"}-[*1..2 {tag:"vip"}]->contact:Person',
+        includeInternalMetadata: true,
+      );
+
+      expect(rows, isNotEmpty);
+      final edges = query.extractVariableLengthPathForTesting(
+        rows.first,
+        connectionIndex: 0,
+      );
+
+      expect(edges, isNotNull);
+      expect(edges, isNotEmpty);
+      expect(
+        edges!.every((edge) => edge.properties?['tag'] == 'vip'),
+        isTrue,
+      );
+    });
+
+    test('matchPaths exposes variable-length edge properties (forward)', () {
+      final paths = query.matchPaths(
+        'ceo:Person{id:"ceo"}-[:MANAGES*1..2 {priority:"high"}]->target:Person',
+      );
+
+      final engineerPath = paths.firstWhere(
+        (path) => path.nodes['target'] == 'engineer1',
+      );
+
+      expect(engineerPath.edges.length, 2);
+      for (final edge in engineerPath.edges) {
+        expect(edge.type, equals('MANAGES'));
+        expect(edge.properties?['priority'], equals('high'));
+      }
+    });
+
+    test('matchPaths exposes variable-length edge properties (backward)', () {
+      final paths = query.matchPaths(
+        'target:Person<-[:REPORTS_TO*2 {priority:"high"}]-report:Person{id:"engineer1"}',
+      );
+
+      final path = paths.single;
+      expect(path.edges.length, 2);
+      for (final edge in path.edges) {
+        expect(edge.type, equals('REPORTS_TO'));
+        expect(edge.properties?['priority'], equals('high'));
+      }
+    });
   });
 }

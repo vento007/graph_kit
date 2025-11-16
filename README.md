@@ -578,11 +578,14 @@ final enriched = query.matchRows(
 );
 
 // matchPaths includes edge metadata in PathEdge.properties
-final paths = query.matchPaths('mentor<-[:MENTORS {since: 2021}]-mentee');
+final paths = query.matchPaths(
+  'mentor<-[:MENTORS {since: 2021}]-mentee'
+  '         -[:COACHES*1..2 {focus: "onboarding"}]->apprentice',
+);
 print(paths.first.edges.first.properties); // {since: 2021}
 ```
 
-> **Heads up:** Relationship property filters currently apply only to fixed-length hops. Variable-length patterns (`[:TYPE*...]`) ignore `{...}` filters until support lands.
+> **Heads up:** Variable-length edge variables now support inline `{...}` filters, `WHERE r.prop`, `type(r)` comparisons, and `RETURN r.prop` projections (returned as per-hop lists). The only remaining limitation is `matchPaths()` with `RETURN` clauses that exclude edge variables—you still get full path metadata, but edges omitted from the RETURN projection won’t appear in `PathMatch.nodes`.
 
 ### 2.11 Utility Methods
 

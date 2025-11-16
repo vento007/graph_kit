@@ -377,9 +377,7 @@ RETURN person, friend, r.since AS connectedSince, r.strength
 MATCH mentee<-[:MENTORS {since: 2021}]-mentor
 ```
 
-`matchPaths` and `matchPathsMany` include the same metadata on every `PathEdge`, so visualizations and layout tooling can inspect relationship properties directly.
-
-> **Limitation:** Relationship property filters currently apply only to fixed-length hops. Variable-length patterns (`[:TYPE*...]`) ignore `{...}` filters and `r.prop` expressions until support is implemented.
+`matchPaths` and `matchPathsMany` include the same metadata on every `PathEdge`, including variable-length segments. Forward, backward, and wildcard `[:TYPE*{...}]` patterns now expose each hop’s properties and honor inline filters, `WHERE r.prop`, and `RETURN r.prop` (RETURN emits per-hop lists).
 
 ## Variable-Length Paths
 
