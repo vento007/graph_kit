@@ -43,6 +43,7 @@ In-memory, typed directed multigraph with:
 - **Relationship properties** for weights, timestamps, metadata, and inline filtering
 - **Multiple relationships** between the same nodes
 - **Advanced Cypher queries** with WHERE clauses, RETURN projection, logical operators, variable-length paths, and edge variable comparison
+- **Ordering and Pagination** with ORDER BY, SKIP, and LIMIT
 - **Complete path results** with Neo4j-style edge information
 - **Graph algorithms** for analysis (shortest path, connected components, topological sort, reachability)
 

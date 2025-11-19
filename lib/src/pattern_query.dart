@@ -1,5 +1,6 @@
 // pattern_query.dart - PetitParser implementation
 import 'package:petitparser/petitparser.dart';
+
 import 'cypher_grammar.dart';
 import 'cypher_models.dart';
 import 'graph.dart';
@@ -21,6 +22,28 @@ class PatternQuery<N extends Node> {
   ///
   /// Throws [FormatException] if the pattern cannot be parsed
   List<Map<String, dynamic>> matchRows(
+    String pattern, {
+    String? startId,
+    List<String>? startIds,
+    String? startType,
+    bool includeInternalMetadata = false,
+  }) {
+    final result = _matchRowsInternal(
+      pattern,
+      startId: startId,
+      startIds: startIds,
+      startType: startType,
+      includeInternalMetadata: includeInternalMetadata,
+    );
+    return result.projectedRows;
+  }
+
+  /// Internal method returning both raw and projected rows, sorted and paginated together
+  ({
+    List<Map<String, String>> rawRows,
+    List<Map<String, dynamic>> projectedRows,
+  })
+  _matchRowsInternal(
     String pattern, {
     String? startId,
     List<String>? startIds,
@@ -98,9 +121,12 @@ class PatternQuery<N extends Node> {
       }
     }
 
-    // Debug removed - working correctly
-
-    if (parts.isEmpty) return const <Map<String, dynamic>>[];
+    if (parts.isEmpty) {
+      return (
+        rawRows: const <Map<String, String>>[],
+        projectedRows: const <Map<String, dynamic>>[],
+      );
+    }
 
     final traceStore = _VariableLengthTraceStore();
     _lastVariableLengthTraceStore = traceStore;
@@ -113,7 +139,10 @@ class PatternQuery<N extends Node> {
     List<Map<String, String>> currentRows = <Map<String, String>>[];
     final firstAlias = _aliasOf(parts.first);
     if (firstAlias.isEmpty) {
-      return const <Map<String, dynamic>>[];
+      return (
+        rawRows: const <Map<String, String>>[],
+        projectedRows: const <Map<String, dynamic>>[],
+      );
     }
 
     // Validate and normalize start parameters
@@ -129,7 +158,10 @@ class PatternQuery<N extends Node> {
           .toList();
 
       if (validStartIds.isEmpty) {
-        return const <Map<String, dynamic>>[];
+        return (
+          rawRows: const <Map<String, String>>[],
+          projectedRows: const <Map<String, dynamic>>[],
+        );
       }
 
       // Try each position in pattern for each startId
@@ -202,7 +234,10 @@ class PatternQuery<N extends Node> {
         final edgePart = isForward ? part : parts[i + 1];
         final edgeTypes = _edgeTypeFrom(edgePart);
         if (edgeTypes == null) {
-          return const <Map<String, dynamic>>[];
+          return (
+            rawRows: const <Map<String, String>>[],
+            projectedRows: const <Map<String, dynamic>>[],
+          );
         }
         // Note: empty list [] means wildcard (match all types)
 
@@ -251,18 +286,257 @@ class PatternQuery<N extends Node> {
       currentRows = _applyWhereClause(currentRows, whereClause, queryContext);
     }
 
+    // Prepare final results
+    List<Map<String, dynamic>> finalResults;
+
     // Apply RETURN clause if present (filtering and property resolution)
     if (returnItems != null) {
-      return _applyReturnClause(currentRows, returnItems, queryContext);
+      finalResults = _applyReturnClause(currentRows, returnItems, queryContext);
+    } else {
+      // Backward compatibility: no RETURN clause returns all variables
+      finalResults = currentRows.map((row) {
+        final outputRow = includeInternalMetadata
+            ? Map<String, String>.from(row)
+            : _rowWithoutInternalKeys(row);
+        return outputRow.cast<String, dynamic>();
+      }).toList();
     }
 
-    // Backward compatibility: no RETURN clause returns all variables
-    return currentRows.map((row) {
-      final outputRow = includeInternalMetadata
-          ? Map<String, String>.from(row)
-          : _rowWithoutInternalKeys(row);
-      return outputRow.cast<String, dynamic>();
-    }).toList();
+    // Apply ORDER BY, SKIP, and LIMIT
+    if (result.value is List && result.value.length >= 6) {
+      final orderByClause = result.value[3];
+      final skipClause = result.value[4];
+      final limitClause = result.value[5];
+
+      if (orderByClause != null) {
+        final sortItems = _extractOrderByItems(orderByClause);
+
+        // Combine original and result rows for sorting
+        // This allows sorting by aliases (in result) AND variables (in original)
+        final combinedRows = List.generate(
+          finalResults.length,
+          (i) => (original: currentRows[i], result: finalResults[i]),
+        );
+
+        _applyOrderBy(combinedRows, sortItems);
+
+        // Unzip sorted results
+        finalResults = combinedRows.map((e) => e.result).toList();
+        currentRows = combinedRows.map((e) => e.original).toList();
+      }
+
+      if (skipClause != null || limitClause != null) {
+        final skip = skipClause != null ? _extractSkip(skipClause) : 0;
+        final limit = limitClause != null ? _extractLimit(limitClause) : null;
+
+        finalResults = _applySkipLimit(finalResults, skip, limit);
+        // Also slice raw rows to stay in sync
+        // _applySkipLimit works on generic list if we cast properly or refactor
+        // Since it returns List<Map<String, dynamic>>, let's just duplicate logic slightly for simplicity
+
+        if (skip > 0) {
+          if (skip >= currentRows.length) {
+            currentRows = [];
+          } else {
+            currentRows = currentRows.sublist(skip);
+          }
+        }
+        if (limit != null) {
+          if (limit < currentRows.length) {
+            currentRows = currentRows.sublist(0, limit);
+          }
+        }
+      }
+    }
+
+    return (rawRows: currentRows, projectedRows: finalResults);
+  }
+
+  List<SortItem> _extractOrderByItems(dynamic orderByClause) {
+    // orderByClause: [whitespace, 'ORDER BY', whitespace, orderByExpression]
+    // orderByExpression: [firstItem, [[whitespace, ',', whitespace, nextItem], ...]]
+    if (orderByClause is! List || orderByClause.length < 4) return [];
+
+    final expression = orderByClause[3];
+    final items = <SortItem>[];
+
+    if (expression is List && expression.isNotEmpty) {
+      // First item
+      items.add(_extractSortItem(expression[0]));
+
+      // Subsequent items
+      if (expression.length > 1 && expression[1] is List) {
+        for (final part in expression[1] as List) {
+          if (part is List && part.length >= 4) {
+            items.add(_extractSortItem(part[3]));
+          }
+        }
+      }
+    }
+    return items;
+  }
+
+  SortItem _extractSortItem(dynamic sortItemParse) {
+    // sortItem: (propertyExpression | variable) & optionalDirection
+    if (sortItemParse is! List) return const SortItem(variable: '');
+
+    final itemPart = sortItemParse[0];
+    final directionPart = sortItemParse[1];
+
+    String? variable;
+    String? propertyVariable;
+    String? propertyName;
+
+    // Check if it's a property expression [variable, '.', variable]
+    // itemPart is a List. If it is property expression, it looks like [varList, '.', varList]
+    // If it is a simple variable, it looks like [char, [chars]] (from variable parser)
+
+    // To distinguish, we check if it has '.' at index 1
+    if (itemPart is List && itemPart.length == 3 && itemPart[1] == '.') {
+      propertyVariable = _flattenToString(itemPart[0]);
+      propertyName = _flattenToString(itemPart[2]);
+    } else {
+      variable = _flattenToString(itemPart);
+    }
+
+    bool ascending = true;
+    if (directionPart != null &&
+        directionPart is List &&
+        directionPart.length >= 2) {
+      final dir = directionPart[1].toString().toUpperCase();
+      if (dir.startsWith('DESC')) {
+        ascending = false;
+      }
+    }
+
+    return SortItem(
+      variable: variable,
+      propertyVariable: propertyVariable,
+      propertyName: propertyName,
+      ascending: ascending,
+    );
+  }
+
+  int _extractSkip(dynamic skipClause) {
+    // [whitespace, 'SKIP', whitespace, digits]
+    if (skipClause is List && skipClause.length >= 4) {
+      return int.tryParse(skipClause[3].join()) ?? 0;
+    }
+    return 0;
+  }
+
+  int _extractLimit(dynamic limitClause) {
+    // [whitespace, 'LIMIT', whitespace, digits]
+    if (limitClause is List && limitClause.length >= 4) {
+      return int.tryParse(limitClause[3].join()) ?? 0;
+    }
+    return 0;
+  }
+
+  void _applyOrderBy(
+    List<({Map<String, String> original, Map<String, dynamic> result})> rows,
+    List<SortItem> sortItems,
+  ) {
+    rows.sort((a, b) {
+      for (final item in sortItems) {
+        dynamic valA;
+        dynamic valB;
+
+        // Try direct key match first (aliases or simple variables) in RESULT map
+        // Then fallback to ORIGINAL map (for variables not in RETURN)
+
+        if (item.isProperty) {
+          // Try 'variable.property' key (aliases in result)
+          final key = '${item.propertyVariable}.${item.propertyName}';
+
+          // Check Result map first
+          if (a.result.containsKey(key)) {
+            valA = a.result[key];
+            valB = b.result[key];
+          }
+          // Then check if alias matches property variable (e.g. RETURN p AS x ORDER BY x.age?)
+          // No, aliases are usually simple names.
+          // Fallback to Original map: look up node
+          else if (a.original.containsKey(item.propertyVariable)) {
+            valA = _resolveProperty(
+              a.original[item.propertyVariable],
+              item.propertyName!,
+            );
+            valB = _resolveProperty(
+              b.original[item.propertyVariable],
+              item.propertyName!,
+            );
+          }
+        } else {
+          final key = item.variable!;
+          // Check Result map (aliases)
+          if (a.result.containsKey(key)) {
+            valA = a.result[key];
+            valB = b.result[key];
+          }
+          // Fallback to Original map (variable)
+          else if (a.original.containsKey(key)) {
+            valA = a.original[key];
+            valB = b.original[key];
+          }
+        }
+
+        final comparison = _compareDynamic(valA, valB);
+        if (comparison != 0) {
+          return item.ascending ? comparison : -comparison;
+        }
+      }
+      return 0;
+    });
+  }
+
+  dynamic _resolveProperty(dynamic nodeOrId, String property) {
+    if (nodeOrId is String && graph.nodesById.containsKey(nodeOrId)) {
+      final node = graph.nodesById[nodeOrId]!;
+      // Check built-in properties
+      if (property == 'id') return node.id;
+      if (property == 'label') return node.label;
+      if (property == 'type') return node.type;
+      // Check custom properties
+      return node.properties?[property];
+    }
+    return null;
+  }
+
+  int _compareDynamic(dynamic a, dynamic b) {
+    if (a == null && b == null) return 0;
+    if (a == null) return -1; // Nulls first
+    if (b == null) return 1;
+
+    if (a is num && b is num) return a.compareTo(b);
+    if (a is String && b is String) return a.compareTo(b);
+    if (a is bool && b is bool) return a == b ? 0 : (a ? 1 : -1);
+    if (a is Comparable && b is Comparable) {
+      try {
+        return a.compareTo(b);
+      } catch (_) {
+        return a.toString().compareTo(b.toString());
+      }
+    }
+    return a.toString().compareTo(b.toString());
+  }
+
+  List<Map<String, dynamic>> _applySkipLimit(
+    List<Map<String, dynamic>> rows,
+    int skip,
+    int? limit,
+  ) {
+    var result = rows;
+    if (skip > 0) {
+      if (skip >= result.length) return [];
+      result = result.sublist(skip);
+    }
+    if (limit != null) {
+      if (limit < result.length) {
+        result = result.sublist(0, limit);
+      }
+    }
+    return result;
   }
 
   /// Executes pattern from a specific position bidirectionally
@@ -551,14 +825,14 @@ class PatternQuery<N extends Node> {
         continue;
       }
 
-      final adjacency =
-          isForward ? graph.out[current.nodeId] : graph.inn[current.nodeId];
+      final adjacency = isForward
+          ? graph.out[current.nodeId]
+          : graph.inn[current.nodeId];
       if (adjacency == null || adjacency.isEmpty) {
         continue;
       }
 
-      final typesToExplore =
-          matchAllEdgeTypes ? adjacency.keys : edgeTypes;
+      final typesToExplore = matchAllEdgeTypes ? adjacency.keys : edgeTypes;
 
       for (final edgeType in typesToExplore) {
         if (!matchAllEdgeTypes && adjacency[edgeType] == null) {
@@ -614,12 +888,14 @@ class PatternQuery<N extends Node> {
     return matches;
   }
 
-  static const String _kVariableLengthMetadataPrefix = '__graphkit_vl__segment_';
+  static const String _kVariableLengthMetadataPrefix =
+      '__graphkit_vl__segment_';
 
   String _variableLengthMetadataKey(int connectionIndex) =>
       '$_kVariableLengthMetadataPrefix$connectionIndex';
 
-  bool _isInternalKey(String key) => key.startsWith(_kVariableLengthMetadataPrefix);
+  bool _isInternalKey(String key) =>
+      key.startsWith(_kVariableLengthMetadataPrefix);
 
   Map<String, String> _rowWithoutInternalKeys(Map<String, String> row) {
     final clean = <String, String>{};
@@ -706,122 +982,62 @@ class PatternQuery<N extends Node> {
     List<String>? startIds,
     String? startType,
   }) {
-    final hasReturn = RegExp(
-      r'\s+RETURN\s+',
-      caseSensitive: false,
-    ).hasMatch(pattern);
-
-    if (!hasReturn) {
-      final rows = matchRows(
-        pattern,
-        startId: startId,
-        startIds: startIds,
-        startType: startType,
-        includeInternalMetadata: true,
-      );
-      final pathMatches = <PathMatch>[];
-
-      // Strip WHERE clause for path reconstruction
-      final patternWithoutWhere = pattern.replaceAll(
-        RegExp(r'\s+WHERE\s+.+$', caseSensitive: false),
-        '',
-      );
-
-      // Extract edge variables from the pattern to filter them out of nodes
-      final edgeVarNames = _extractEdgeVariableNames(patternWithoutWhere);
-
-      for (final row in rows) {
-        // Keep full row for path reconstruction (needs edge variables for lookups)
-        final fullRow = <String, String>{};
-        for (final entry in row.entries) {
-          if (entry.value is String) {
-            fullRow[entry.key] = entry.value as String;
-          }
-        }
-
-        // Build sequences using full row
-        final sequences = _buildPathEdgeSequencesForRow(
-          patternWithoutWhere,
-          fullRow,
-        );
-
-        // Filter out edge variables when creating PathMatch nodes
-        final nodeIds = <String, String>{};
-        for (final entry in fullRow.entries) {
-          if (!edgeVarNames.contains(entry.key) && !_isInternalKey(entry.key)) {
-            nodeIds[entry.key] = entry.value;
-          }
-        }
-
-        for (final edges in sequences) {
-          pathMatches.add(
-            PathMatch(nodes: Map<String, String>.from(nodeIds), edges: edges),
-          );
-        }
-      }
-      return pathMatches;
-    }
-
-    final filteredRows = matchRows(
+    // Use internal method to get both raw and projected rows
+    // Raw rows are needed for edge reconstruction (IDs)
+    // Projected rows are needed for result nodes (aliases/properties)
+    final result = _matchRowsInternal(
       pattern,
       startId: startId,
       startIds: startIds,
-      includeInternalMetadata: true,
-    );
-    final patternWithoutReturn = pattern.replaceAll(
-      RegExp(r'\s+RETURN\s+.+$', caseSensitive: false),
-      '',
-    );
-    final unfilteredRows = matchRows(
-      patternWithoutReturn,
-      startId: startId,
-      startIds: startIds,
+      startType: startType,
       includeInternalMetadata: true,
     );
 
-    // Extract edge variables to filter them out
-    final patternWithoutReturnOrWhere = patternWithoutReturn.replaceAll(
-      RegExp(r'\s+WHERE\s+.+$', caseSensitive: false),
-      '',
-    );
-    final edgeVarNames = _extractEdgeVariableNames(patternWithoutReturnOrWhere);
-
+    final rawRows = result.rawRows;
+    final projectedRows = result.projectedRows;
     final pathMatches = <PathMatch>[];
 
-    for (var i = 0; i < filteredRows.length && i < unfilteredRows.length; i++) {
-      // Keep full rows for path reconstruction
-      final filteredFullRow = <String, String>{};
-      for (final entry in filteredRows[i].entries) {
-        if (entry.value is String) {
-          filteredFullRow[entry.key] = entry.value as String;
-        }
-      }
+    // Strip WHERE and RETURN clauses for path reconstruction
+    // We only need the pattern structure to parse edge sequences
+    final patternStructure = pattern.replaceAll(
+      RegExp(
+        r'\s+(?:WHERE|RETURN|ORDER\s+BY|SKIP|LIMIT)[\s\S]*$',
+        caseSensitive: false,
+      ),
+      '',
+    );
 
-      final unfilteredFullRow = <String, String>{};
-      for (final entry in unfilteredRows[i].entries) {
-        if (entry.value is String) {
-          unfilteredFullRow[entry.key] = entry.value as String;
-        }
-      }
+    // Edge variable names to filter out from results
+    final edgeVarNames = _extractEdgeVariableNames(patternStructure);
 
-      // Build sequences using full row
-      final sequences = _buildPathEdgeSequencesForRow(
-        patternWithoutReturnOrWhere,
-        unfilteredFullRow,
-      );
+    for (var i = 0; i < rawRows.length; i++) {
+      final rawRow = rawRows[i];
+      // projectedRows might be shorter if something went wrong, but they should be sync'd
+      if (i >= projectedRows.length) break;
+      final projectedRow = projectedRows[i];
 
-      // Filter out edge variables when creating PathMatch nodes
-      final filteredIds = <String, String>{};
-      for (final entry in filteredFullRow.entries) {
+      // Build sequences using raw row (contains all node IDs)
+      final sequences = _buildPathEdgeSequencesForRow(patternStructure, rawRow);
+
+      // Filter out edge variables and internal keys from projected result
+      // PathMatch.nodes should contain what the user asked for (projected)
+      // but stored as Strings if possible?
+      // Wait, PathMatch.nodes is Map<String, String>.
+      // If projected values are not strings, this is a breaking change for PathMatch contract
+      // or we need to convert them.
+
+      // However, PathMatch is primarily about graph topology.
+      // If RETURN is used, it's less about "nodes" and more about "columns".
+
+      final filteredNodes = <String, String>{};
+      for (final entry in projectedRow.entries) {
         if (!edgeVarNames.contains(entry.key) && !_isInternalKey(entry.key)) {
-          filteredIds[entry.key] = entry.value;
+          filteredNodes[entry.key] = entry.value?.toString() ?? 'null';
         }
       }
 
       for (final edges in sequences) {
-        pathMatches.add(
-          PathMatch(nodes: Map<String, String>.from(filteredIds), edges: edges),
-        );
+        pathMatches.add(PathMatch(nodes: filteredNodes, edges: edges));
       }
     }
 
@@ -868,8 +1084,9 @@ class PatternQuery<N extends Node> {
       if (result.value.length >= 2 && result.value[0] != null) {
         patternWithWhere = result.value[1];
       } else {
-        patternWithWhere =
-            result.value.length > 1 ? result.value[1] : result.value[0];
+        patternWithWhere = result.value.length > 1
+            ? result.value[1]
+            : result.value[0];
       }
     } else {
       patternWithWhere = result.value;
@@ -2310,8 +2527,11 @@ class PatternQuery<N extends Node> {
           if (rightBinding == null) return false;
 
           if (rightBinding.isVariableLength) {
-            final rightEdges =
-                _lookupVariableLengthEdges(row, rightBinding, context);
+            final rightEdges = _lookupVariableLengthEdges(
+              row,
+              rightBinding,
+              context,
+            );
             if (rightEdges == null || rightEdges.isEmpty) return false;
             final rightTypes = rightEdges.map((edge) => edge.type).toList();
             return _compareVariableLengthTypeLists(
@@ -2343,8 +2563,11 @@ class PatternQuery<N extends Node> {
         if (rightBinding == null) return false;
 
         if (rightBinding.isVariableLength) {
-          final rightEdges =
-              _lookupVariableLengthEdges(row, rightBinding, context);
+          final rightEdges = _lookupVariableLengthEdges(
+            row,
+            rightBinding,
+            context,
+          );
           if (rightEdges == null || rightEdges.isEmpty) return false;
           final rightTypes = rightEdges.map((edge) => edge.type).toList();
           return rightTypes.every(
@@ -2510,6 +2733,9 @@ class PatternQuery<N extends Node> {
     if (trimmed == 'true') return true;
     if (trimmed == 'false') return false;
 
+    // Null
+    if (trimmed == 'null') return null;
+
     // Number
     final numValue = int.tryParse(trimmed);
     if (numValue != null) return numValue;
@@ -2631,10 +2857,7 @@ class _EdgeVariableBinding {
 }
 
 class _QueryContext {
-  const _QueryContext({
-    this.edgeBindings = const {},
-    this.traceStore,
-  });
+  const _QueryContext({this.edgeBindings = const {}, this.traceStore});
 
   final Map<String, _EdgeVariableBinding> edgeBindings;
   final _VariableLengthTraceStore? traceStore;

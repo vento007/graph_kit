@@ -931,6 +931,47 @@ for (var {'name': employeeName, 'salary': pay} in results) {
 var {'name': name, 'salary': salary} = results.first;
 ```
 
+## Sorting and Pagination
+
+GraphKit supports `ORDER BY`, `SKIP`, and `LIMIT` clauses for controlling result order and pagination. These clauses (if present) must appear in this specific order at the end of your query:
+
+`... RETURN ... ORDER BY ... SKIP ... LIMIT ...`
+
+### ORDER BY Clause
+
+Sort results by any variable or property. Default sort order is ascending (ASC).
+
+```cypher
+# Sort by property (ascending by default)
+MATCH person:Person RETURN person.name, person.age ORDER BY person.age
+
+# Explicit ASC/DESC
+MATCH person:Person RETURN person.name, person.age ORDER BY person.age DESC
+MATCH person:Person RETURN person.name, person.age ORDER BY person.name ASC
+
+# Sort by alias from RETURN clause
+MATCH person:Person RETURN person.name AS name ORDER BY name
+
+# Sort by multiple keys
+MATCH person:Person
+RETURN person.department, person.age
+ORDER BY person.department ASC, person.age DESC
+```
+
+### SKIP and LIMIT (Pagination)
+
+Use `SKIP` to offset results and `LIMIT` to restrict the number of results returned.
+
+```cypher
+# Get top 5 results
+MATCH person:Person ORDER BY person.salary DESC LIMIT 5
+
+# Skip first 10 and get next 5 (Page 3 of size 5)
+MATCH person:Person ORDER BY person.name SKIP 10 LIMIT 5
+```
+
+**Note:** `SKIP` and `LIMIT` work best when combined with `ORDER BY` to ensure deterministic results.
+
 ## Advanced Examples
 
 ### Complex Multi-Hop with WHERE
