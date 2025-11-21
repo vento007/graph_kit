@@ -318,7 +318,7 @@ class PatternQuery<N extends Node> {
           (i) => (original: currentRows[i], result: finalResults[i]),
         );
 
-        _applyOrderBy(combinedRows, sortItems);
+        _applyOrderBy(combinedRows, sortItems, queryContext);
 
         // Unzip sorted results
         finalResults = combinedRows.map((e) => e.result).toList();
@@ -386,17 +386,24 @@ class PatternQuery<N extends Node> {
     String? variable;
     String? propertyVariable;
     String? propertyName;
+    String? functionName;
+    String? functionArgument;
 
     // Check if it's a property expression [variable, '.', variable]
-    // itemPart is a List. If it is property expression, it looks like [varList, '.', varList]
-    // If it is a simple variable, it looks like [char, [chars]] (from variable parser)
-
-    // To distinguish, we check if it has '.' at index 1
     if (itemPart is List && itemPart.length == 3 && itemPart[1] == '.') {
       propertyVariable = _flattenToString(itemPart[0]);
       propertyName = _flattenToString(itemPart[2]);
     } else {
-      variable = _flattenToString(itemPart);
+      final flattened = _flattenToString(itemPart).trim();
+      final functionMatch = RegExp(
+        r'^([A-Za-z_][\w]*)\(\s*(\w+)\s*\)$',
+      ).firstMatch(flattened);
+      if (functionMatch != null) {
+        functionName = functionMatch.group(1);
+        functionArgument = functionMatch.group(2);
+      } else {
+        variable = flattened;
+      }
     }
 
     bool ascending = true;
@@ -413,6 +420,8 @@ class PatternQuery<N extends Node> {
       variable: variable,
       propertyVariable: propertyVariable,
       propertyName: propertyName,
+      functionName: functionName,
+      functionArgument: functionArgument,
       ascending: ascending,
     );
   }
@@ -436,50 +445,12 @@ class PatternQuery<N extends Node> {
   void _applyOrderBy(
     List<({Map<String, String> original, Map<String, dynamic> result})> rows,
     List<SortItem> sortItems,
+    _QueryContext context,
   ) {
     rows.sort((a, b) {
       for (final item in sortItems) {
-        dynamic valA;
-        dynamic valB;
-
-        // Try direct key match first (aliases or simple variables) in RESULT map
-        // Then fallback to ORIGINAL map (for variables not in RETURN)
-
-        if (item.isProperty) {
-          // Try 'variable.property' key (aliases in result)
-          final key = '${item.propertyVariable}.${item.propertyName}';
-
-          // Check Result map first
-          if (a.result.containsKey(key)) {
-            valA = a.result[key];
-            valB = b.result[key];
-          }
-          // Then check if alias matches property variable (e.g. RETURN p AS x ORDER BY x.age?)
-          // No, aliases are usually simple names.
-          // Fallback to Original map: look up node
-          else if (a.original.containsKey(item.propertyVariable)) {
-            valA = _resolveProperty(
-              a.original[item.propertyVariable],
-              item.propertyName!,
-            );
-            valB = _resolveProperty(
-              b.original[item.propertyVariable],
-              item.propertyName!,
-            );
-          }
-        } else {
-          final key = item.variable!;
-          // Check Result map (aliases)
-          if (a.result.containsKey(key)) {
-            valA = a.result[key];
-            valB = b.result[key];
-          }
-          // Fallback to Original map (variable)
-          else if (a.original.containsKey(key)) {
-            valA = a.original[key];
-            valB = b.original[key];
-          }
-        }
+        final valA = _sortValueForItem(item, a.original, a.result, context);
+        final valB = _sortValueForItem(item, b.original, b.result, context);
 
         final comparison = _compareDynamic(valA, valB);
         if (comparison != 0) {
@@ -488,6 +459,102 @@ class PatternQuery<N extends Node> {
       }
       return 0;
     });
+  }
+
+  dynamic _sortValueForItem(
+    SortItem item,
+    Map<String, String> original,
+    Map<String, dynamic> projected,
+    _QueryContext context,
+  ) {
+    if (item.isFunction) {
+      return _sortValueForFunction(item, original, context);
+    }
+
+    if (item.isProperty) {
+      final key = '${item.propertyVariable}.${item.propertyName}';
+      if (projected.containsKey(key)) {
+        return projected[key];
+      }
+
+      if (context.edgeBindings.containsKey(item.propertyVariable)) {
+        final edgeValue = _resolveEdgePropertyValue(
+          original,
+          item.propertyVariable!,
+          item.propertyName!,
+          context,
+        );
+        return _firstHopValue(edgeValue);
+      }
+
+      if (original.containsKey(item.propertyVariable)) {
+        return _resolveProperty(
+          original[item.propertyVariable],
+          item.propertyName!,
+        );
+      }
+
+      return null;
+    }
+
+    if (item.variable != null) {
+      final key = item.variable!;
+      if (projected.containsKey(key)) {
+        return projected[key];
+      }
+      if (context.edgeBindings.containsKey(key)) {
+        return _edgeTypeForOrdering(original, key, context);
+      }
+      return original[key];
+    }
+
+    return null;
+  }
+
+  dynamic _sortValueForFunction(
+    SortItem item,
+    Map<String, String> original,
+    _QueryContext context,
+  ) {
+    final function = item.functionName?.toLowerCase();
+    final argument = item.functionArgument;
+
+    if (function == 'type' && argument != null) {
+      if (context.edgeBindings.containsKey(argument)) {
+        return _edgeTypeForOrdering(original, argument, context);
+      }
+      final nodeId = original[argument];
+      if (nodeId != null) {
+        final node = graph.nodesById[nodeId];
+        return node?.type;
+      }
+    }
+
+    return null;
+  }
+
+  dynamic _edgeTypeForOrdering(
+    Map<String, String> row,
+    String edgeVar,
+    _QueryContext context,
+  ) {
+    final binding = context.edgeBindings[edgeVar];
+    if (binding == null) return null;
+
+    if (binding.isVariableLength) {
+      final edges = _lookupVariableLengthEdges(row, binding, context);
+      if (edges == null || edges.isEmpty) return null;
+      return edges.first.type;
+    }
+
+    return row[edgeVar];
+  }
+
+  dynamic _firstHopValue(dynamic value) {
+    if (value is List && value.isNotEmpty) {
+      return value.first;
+    }
+    return value;
   }
 
   dynamic _resolveProperty(dynamic nodeOrId, String property) {

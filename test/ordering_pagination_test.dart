@@ -84,6 +84,52 @@ void main() {
         ),
       );
 
+      // REPORTS_TO edges with "since" metadata for single-hop sorting
+      graph.addEdge(
+        'alice',
+        'REPORTS_TO',
+        'bob',
+        properties: {'since': 2020},
+      );
+      graph.addEdge(
+        'charlie',
+        'REPORTS_TO',
+        'alice',
+        properties: {'since': 2017},
+      );
+      graph.addEdge(
+        'dave',
+        'REPORTS_TO',
+        'eve',
+        properties: {'since': 2021},
+      );
+
+      // MENTORS chain for variable-length sorting (two exact hops)
+      graph.addEdge(
+        'alice',
+        'MENTORS',
+        'bob',
+        properties: {'since': 2022},
+      );
+      graph.addEdge(
+        'bob',
+        'MENTORS',
+        'dave',
+        properties: {'since': 2018},
+      );
+      graph.addEdge(
+        'charlie',
+        'MENTORS',
+        'eve',
+        properties: {'since': 2015},
+      );
+      graph.addEdge(
+        'eve',
+        'MENTORS',
+        'frank',
+        properties: {'since': 2014},
+      );
+
       query = PatternQuery(graph);
     });
 
@@ -150,6 +196,36 @@ void main() {
 
         expect(result[0]['p.name'], 'Frank'); // Null dept
         expect(result[0]['p.dept'], null);
+      });
+
+      test('sort by relationship property (single hop)', () {
+        final result = query.matchRows(
+          'MATCH src:Person-[r:REPORTS_TO]->dst:Person RETURN src.name AS employee ORDER BY r.since DESC',
+        );
+
+        expect(result.length, 3);
+        expect(result[0]['employee'], 'Dave'); // since 2021
+        expect(result[1]['employee'], 'Alice'); // since 2020
+        expect(result[2]['employee'], 'Charlie'); // since 2017
+      });
+
+      test('sort by relationship property on variable-length edges (first hop)', () {
+        final result = query.matchRows(
+          'MATCH mentor:Person-[r:MENTORS*2]->mentee:Person RETURN mentor.name AS mentor ORDER BY r.since DESC',
+        );
+
+        expect(result.length, 2); // Alice->Bob->Dave and Charlie->Eve->Frank
+        expect(result[0]['mentor'], 'Alice'); // first hop since 2022
+        expect(result[1]['mentor'], 'Charlie'); // first hop since 2015
+      });
+
+      test('sort by relationship type using type(r)', () {
+        final result = query.matchRows(
+          'MATCH src:Person-[r]->dst:Person RETURN type(r) AS rel ORDER BY type(r) DESC',
+        );
+
+        expect(result.isNotEmpty, isTrue);
+        expect(result.first['rel'], 'REPORTS_TO'); // Alphabetically after MENTORS
       });
     });
 

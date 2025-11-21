@@ -956,6 +956,16 @@ MATCH person:Person RETURN person.name AS name ORDER BY name
 MATCH person:Person
 RETURN person.department, person.age
 ORDER BY person.department ASC, person.age DESC
+
+# Sort using relationship metadata
+MATCH employee:Person-[r:REPORTS_TO]->manager:Person
+RETURN employee.name, manager.name
+ORDER BY r.since DESC
+
+# Sort by relationship type (type() function)
+MATCH a-[r]->b
+RETURN a, b
+ORDER BY type(r)
 ```
 
 ### SKIP and LIMIT (Pagination)
@@ -971,6 +981,8 @@ MATCH person:Person ORDER BY person.name SKIP 10 LIMIT 5
 ```
 
 **Note:** `SKIP` and `LIMIT` work best when combined with `ORDER BY` to ensure deterministic results.
+
+**Variable-length semantics:** When sorting on relationship properties or `type(r)` for a variable-length segment, GraphKit compares the *first hop* in each match. This keeps ordering deterministic even when a variable-length alias spans multiple relationships.
 
 ## Advanced Examples
 
