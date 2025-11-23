@@ -769,6 +769,10 @@ class PatternQuery<N extends Node> {
           if (!_nodeMatchesConstraints(nextAlias, nb, nodeMetadata)) {
             continue;
           }
+
+          // Note: We allow overwriting variables (last one wins), so we don't check for
+          // consistency with previous values of nextAlias. This matches the test expectation.
+
           if (!_edgeMatchesConstraints(
             srcId,
             nb,
