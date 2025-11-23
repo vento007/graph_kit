@@ -190,3 +190,44 @@ class ReturnItem {
     return alias != null ? '$variable AS $alias' : variable!;
   }
 }
+
+/// Represents a single item in an ORDER BY clause.
+class SortItem {
+  /// Variable name (for simple sorts like "ORDER BY person")
+  final String? variable;
+
+  /// Variable name for property access (for "ORDER BY person.name", this is "person")
+  final String? propertyVariable;
+
+  /// Property name for property access (for "ORDER BY person.name", this is "name")
+  final String? propertyName;
+
+  /// Optional function name (e.g. "type" in ORDER BY type(r))
+  final String? functionName;
+
+  /// Argument to the function (e.g. "r" in ORDER BY type(r))
+  final String? functionArgument;
+
+  /// True for ascending (default), false for descending
+  final bool ascending;
+
+  const SortItem({
+    this.variable,
+    this.propertyVariable,
+    this.propertyName,
+    this.functionName,
+    this.functionArgument,
+    this.ascending = true,
+  });
+
+  /// Returns true if this is a property access (person.name)
+  bool get isProperty => propertyVariable != null && propertyName != null;
+
+  /// Returns true if this item sorts on a function like type(r)
+  bool get isFunction =>
+      functionName != null && functionArgument != null && functionName != '';
+
+  /// Returns the source variable name if applicable
+  String? get sourceVariable =>
+      propertyVariable ?? variable ?? functionArgument;
+}

@@ -1,3 +1,11 @@
+## 0.8.5
+
+- **Sorting and Pagination**: Added support for `ORDER BY`, `SKIP`, and `LIMIT` clauses in Cypher queries.
+  - Sort by properties: `ORDER BY person.age DESC`
+  - Sort by aliases: `RETURN person.name AS name ORDER BY name`
+  - Pagination: `SKIP 10 LIMIT 5`
+  - Works with variable-length paths and relationship properties
+
 ## 0.8.4
 
 - Variable-length relationship segments now support the same property tooling as single hops: pattern filters, `WHERE r.prop`, `type(r)`, and `RETURN r.prop` (per-hop lists). `matchPaths()` reuses those hops so every `PathEdge` carries its real metadata.

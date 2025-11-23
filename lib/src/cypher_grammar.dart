@@ -6,7 +6,10 @@ class CypherPatternGrammar extends GrammarDefinition {
   Parser start() =>
       ((string('MATCH') & whitespace().plus()).optional() &
               ref0(patternWithWhere) &
-              ref0(returnClause).optional())
+              ref0(returnClause).optional() &
+              ref0(orderByClause).optional() &
+              ref0(skipClause).optional() &
+              ref0(limitClause).optional())
           .end()
           .trim();
 
@@ -156,13 +159,16 @@ class CypherPatternGrammar extends GrammarDefinition {
       ref0(functionExpression) |
       ref0(stringLiteral) |
       ref0(numberLiteral) |
-      ref0(booleanLiteral);
+      ref0(booleanLiteral) |
+      ref0(nullLiteral);
 
   Parser stringLiteral() => char('"') & (char('"').neg()).star() & char('"');
 
   Parser numberLiteral() => digit().plus();
 
   Parser booleanLiteral() => string('true') | string('false');
+
+  Parser nullLiteral() => string('null');
 
   // RETURN clause support
   Parser returnClause() =>
@@ -192,6 +198,40 @@ class CypherPatternGrammar extends GrammarDefinition {
       (string('AS') | string('as') | string('As') | string('aS')) &
       whitespace().plus() &
       ref0(variable);
+
+  // ORDER BY clause
+  Parser orderByClause() =>
+      whitespace().plus() &
+      string('ORDER BY') &
+      whitespace().plus() &
+      ref0(orderByExpression);
+
+  Parser orderByExpression() =>
+      ref0(sortItem) &
+      (whitespace().star() & char(',') & whitespace().star() & ref0(sortItem))
+          .star();
+
+  Parser sortItem() =>
+      (ref0(propertyExpression) | ref0(variable)) &
+      (whitespace().plus() &
+              (string('DESC') |
+                  string('DESCENDING') |
+                  string('ASC') |
+                  string('ASCENDING')))
+          .optional();
+
+  // SKIP and LIMIT clauses
+  Parser skipClause() =>
+      whitespace().plus() &
+      string('SKIP') &
+      whitespace().plus() &
+      digit().plus();
+
+  Parser limitClause() =>
+      whitespace().plus() &
+      string('LIMIT') &
+      whitespace().plus() &
+      digit().plus();
 
   // Helper for optional whitespace
   Parser optionalWhitespace() => whitespace().star();
