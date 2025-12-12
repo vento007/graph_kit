@@ -276,7 +276,7 @@ final paths = query.matchPaths(
 ### 2.5 Row-wise Results - Preserve Path Relationships
 
 ```dart
-// Get specific person-team-project combinations, query.matchRows returns List<Map<String, String>>
+// Get specific person-team-project combinations, query.matchRows returns List<Map<String, dynamic>>
 final rows = query.matchRows('person-[:WORKS_FOR]->team-[:ASSIGNED_TO]->project');
 print(rows);
 // [
@@ -344,23 +344,23 @@ graph.addNode(Node(
   properties: {'age': 35, 'department': 'Engineering', 'salary': 95000}
 ));
 
-// Filter by age - query.matchRows returns List<Map<String, String>>
+// Filter by age - query.matchRows returns List<Map<String, dynamic>>
 final seniors = query.matchRows('MATCH person:Person WHERE person.age > 30');
 print(seniors); // [{person: bob}]
 
-// Filter by department - query.matchRows returns List<Map<String, String>>
+// Filter by department - query.matchRows returns List<Map<String, dynamic>>
 final engineers = query.matchRows('MATCH person:Person WHERE person.department = "Engineering"');
 print(engineers); // [{person: alice}, {person: bob}]
 
-// Combine conditions with AND - query.matchRows returns List<Map<String, String>>
+// Combine conditions with AND - query.matchRows returns List<Map<String, dynamic>>
 final seniorEngineers = query.matchRows('MATCH person:Person WHERE person.age > 30 AND person.department = "Engineering"');
 print(seniorEngineers); // [{person: bob}]
 
-// Use OR conditions - query.matchRows returns List<Map<String, String>>
+// Use OR conditions - query.matchRows returns List<Map<String, dynamic>>
 final youngOrWellPaid = query.matchRows('MATCH person:Person WHERE person.age < 30 OR person.salary > 90000');
 print(youngOrWellPaid); // [{person: alice}, {person: bob}]
 
-// Complex filtering with relationships - query.matchRows returns List<Map<String, String>>
+// Complex filtering with relationships - query.matchRows returns List<Map<String, dynamic>>
 final seniorWorkers = query.matchRows('MATCH person:Person-[:WORKS_FOR]->team:Team WHERE person.age > 30');
 print(seniorWorkers); // [{person: bob, team: engineering}]
 
@@ -618,7 +618,7 @@ print(engineeringWorkers); // {alice, bob}
 |--------|---------|----------|
 | `match()` | `Map<String, Set<String>>` | Get grouped node IDs by variable |
 | `matchMany()` | `Map<String, Set<String>>` | Combine multiple patterns |
-| `matchRows()` | `List<Map<String, String>>` | Preserve path relationships |
+| `matchRows()` | `List<Map<String, dynamic>>` | Preserve path relationships |
 | `matchPaths()` | `List<PathMatch>` | Complete path + edge information |
 | `findByType()` | `Set<String>` | All nodes of specific type |
 | `findByLabelEquals()` | `Set<String>` | Nodes by exact label match |

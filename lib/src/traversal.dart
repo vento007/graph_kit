@@ -334,7 +334,9 @@ PathEnumerationResult enumeratePaths(
       return;
     }
 
-    if (currentPath.length >= maxHops) {
+    // currentPath includes nodes, hops are edges traversed.
+    final hopsSoFar = currentPath.length - 1;
+    if (hopsSoFar >= maxHops) {
       truncatedCount++;
       return;
     }

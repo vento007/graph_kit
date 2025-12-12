@@ -1,4 +1,11 @@
 /// Data models for Cypher query results and specifications.
+int _unorderedMapHash(Map<Object?, Object?>? map) {
+  if (map == null) return 0;
+  return Object.hashAllUnordered(
+    map.entries.map((e) => Object.hash(e.key, e.value)),
+  );
+}
+
 /// Represents an edge in a path result, containing connection information.
 class PathEdge {
   /// Source node ID
@@ -45,12 +52,14 @@ class PathEdge {
 
   @override
   int get hashCode =>
-      from.hashCode ^
-      to.hashCode ^
-      type.hashCode ^
-      fromVariable.hashCode ^
-      toVariable.hashCode ^
-      (properties?.hashCode ?? 0);
+      Object.hash(
+        from,
+        to,
+        type,
+        fromVariable,
+        toVariable,
+        _unorderedMapHash(properties),
+      );
 
   bool _mapEquals(Map<String, dynamic>? a, Map<String, dynamic>? b) {
     if (identical(a, b)) return true;
@@ -85,7 +94,7 @@ class PathMatch {
           _listEquals(edges, other.edges);
 
   @override
-  int get hashCode => nodes.hashCode ^ edges.hashCode;
+  int get hashCode => Object.hash(_unorderedMapHash(nodes), Object.hashAll(edges));
 
   bool _mapEquals<K, V>(Map<K, V> a, Map<K, V> b) {
     if (identical(a, b)) return true;

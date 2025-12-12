@@ -64,7 +64,7 @@ void main() {
     print('✓ Backend does NOT need to send metadata');
     print('✓ All data loaded correctly\n');
 
-    print('${'=' * 70}');
+    print('=' * 70);
     print('REQUIRED FIELDS (updated):');
     print('=' * 70);
     print('REQUIRED:');

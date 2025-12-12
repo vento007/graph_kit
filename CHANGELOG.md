@@ -1,3 +1,9 @@
+## 0.8.6
+
+- Fixed wildcard arrow-only patterns (`a->b`, `a<-b`) and wildcard edge expansion in `matchPaths()`.
+- Fixed `enumeratePaths()` hop limit semantics (`maxHops` now counts edges).
+- Improved variable-length traversal performance and corrected `PathMatch` hashing/deduplication.
+
 ## 0.8.5
 
 - **Sorting and Pagination**: Added support for `ORDER BY`, `SKIP`, and `LIMIT` clauses in Cypher queries.
