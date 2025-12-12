@@ -107,7 +107,7 @@ class GraphLayout {
   }
 }
 
-/// Extension on List<PathMatch> to compute graph layout.
+/// Extension on `List<PathMatch>` to compute graph layout.
 extension PathMatchLayout on List<PathMatch> {
   /// Compute graph layout from path matches.
   ///
@@ -148,16 +148,30 @@ extension PathMatchLayout on List<PathMatch> {
     final variableToNodes = <String, Set<String>>{};
 
     for (final path in this) {
-      allNodes.addAll(path.nodes.values);
+      if (path.edges.isNotEmpty) {
+        final varToId = <String, String>{};
 
-      // Track which nodes belong to which variables
-      for (final entry in path.nodes.entries) {
-        variableToNodes.putIfAbsent(entry.key, () => {}).add(entry.value);
-      }
+        for (final edge in path.edges) {
+          allNodes.add(edge.from);
+          allNodes.add(edge.to);
 
-      // Convert PathEdge to EdgeTriple
-      for (final edge in path.edges) {
-        allEdges.add(EdgeTriple(edge.from, edge.type, edge.to));
+          allEdges.add(EdgeTriple(edge.from, edge.type, edge.to));
+
+          // For variable-length segments, each hop uses the same variable names.
+          // Preserve the first "from" binding and let the final "to" binding win.
+          varToId.putIfAbsent(edge.fromVariable, () => edge.from);
+          varToId[edge.toVariable] = edge.to;
+        }
+
+        for (final entry in varToId.entries) {
+          variableToNodes.putIfAbsent(entry.key, () => {}).add(entry.value);
+        }
+      } else {
+        // Fallback for single-node patterns: rely on PathMatch.nodes.
+        allNodes.addAll(path.nodes.values);
+        for (final entry in path.nodes.entries) {
+          variableToNodes.putIfAbsent(entry.key, () => {}).add(entry.value);
+        }
       }
     }
 
@@ -242,9 +256,20 @@ extension PathMatchLayout on List<PathMatch> {
 
     // Assign depths based on variable order
     for (final path in paths) {
+      final varToId = <String, String>{};
+
+      if (path.edges.isNotEmpty) {
+        for (final edge in path.edges) {
+          varToId.putIfAbsent(edge.fromVariable, () => edge.from);
+          varToId[edge.toVariable] = edge.to;
+        }
+      } else {
+        varToId.addAll(path.nodes);
+      }
+
       for (var i = 0; i < orderedVars.length; i++) {
         final variable = orderedVars[i];
-        final nodeId = path.nodes[variable];
+        final nodeId = varToId[variable];
         if (nodeId != null) {
           // Use MAX depth if node appears multiple times
           final currentDepth = nodeDepths[nodeId] ?? -1;

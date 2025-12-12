@@ -876,12 +876,13 @@ class PatternQuery<N extends Node> {
 
     final queue = <({String nodeId, int hops, List<PathEdge> path})>[];
     final visited = <String, int>{};
+    var qi = 0;
 
     queue.add((nodeId: srcId, hops: 0, path: <PathEdge>[]));
     visited[srcId] = 0;
 
-    while (queue.isNotEmpty) {
-      final current = queue.removeAt(0);
+    while (qi < queue.length) {
+      final current = queue[qi++];
 
       if (current.hops >= minHops && current.nodeId != srcId) {
         matches.add(
@@ -1662,7 +1663,8 @@ class PatternQuery<N extends Node> {
   List<String>? _edgeTypeFrom(String segment) {
     final bracketIndex = segment.indexOf('[');
     if (bracketIndex == -1) {
-      return null;
+      // No explicit edge spec: treat as wildcard (match all types).
+      return <String>[];
     }
 
     var idx = bracketIndex + 1;
@@ -1828,27 +1830,58 @@ class PatternQuery<N extends Node> {
       // Extract edge types from the appropriate part (backward uses toPart)
       final edgePart = isForward ? fromPart : toPart;
       var edgeTypes = _edgeTypeFrom(edgePart);
-      // If no explicit types (e.g., [r]), try to use the bound edge variable from row
-      if (edgeTypes == null || edgeTypes.isEmpty) {
+      if (edgeTypes == null) continue;
+
+      // If no explicit types (e.g., [r] or arrow-only), try to use the bound edge variable from row
+      if (edgeTypes.isEmpty) {
         final edgeVar = _extractEdgeVariableFromString(edgePart);
         final boundType = edgeVar != null ? row[edgeVar] : null;
         if (boundType != null && boundType.isNotEmpty) {
           edgeTypes = [boundType];
         }
       }
-      if (edgeTypes == null || edgeTypes.isEmpty) continue;
 
       // Determine which edge type actually exists between these nodes
       final fromId = isForward ? row[fromVar]! : row[toVar]!;
       final toId = isForward ? row[toVar]! : row[fromVar]!;
 
-      String? actualEdgeType;
-      for (final type in edgeTypes) {
-        if (graph.hasEdge(fromId, type, toId)) {
-          actualEdgeType = type;
-          break;
-        }
+      final edgeInfoMatch = RegExp(r'\[[^\]]*\]').firstMatch(edgePart);
+      final edgeInfo = edgeInfoMatch?.group(0) ?? '';
+      final constraintsForEdge = _edgeConstraintsFromInfo(edgeInfo);
+
+      List<String> candidateTypes;
+      if (edgeTypes.isEmpty) {
+        candidateTypes = (graph.out[fromId]?.keys.toList() ?? <String>[])
+            .where((t) => graph.hasEdge(fromId, t, toId))
+            .where(
+              (t) => _edgeMatchesConstraints(
+                fromId,
+                toId,
+                t,
+                true,
+                constraintsForEdge,
+              ),
+            )
+            .toList()
+          ..sort();
+      } else {
+        candidateTypes = edgeTypes
+            .where((t) => graph.hasEdge(fromId, t, toId))
+            .where(
+              (t) => _edgeMatchesConstraints(
+                fromId,
+                toId,
+                t,
+                true,
+                constraintsForEdge,
+              ),
+            )
+            .toList();
       }
+
+      final actualEdgeType = candidateTypes.isNotEmpty
+          ? candidateTypes.first
+          : null;
 
       if (actualEdgeType == null) continue;
 
@@ -1956,16 +1989,17 @@ class PatternQuery<N extends Node> {
       final edgePart = isForward ? fromPart : toPart;
       var edgeTypes = _edgeTypeFrom(edgePart);
       // If no explicit types (e.g., [r]), try to use the bound edge variable from row
-      if (edgeTypes == null || edgeTypes.isEmpty) {
+      if (edgeTypes == null) {
+        return const <List<PathEdge>>[];
+      }
+      if (edgeTypes.isEmpty) {
         final edgeVar = _extractEdgeVariableFromString(edgePart);
         final boundType = edgeVar != null ? row[edgeVar] : null;
         if (boundType != null && boundType.isNotEmpty) {
           edgeTypes = [boundType];
         }
       }
-      if (edgeTypes == null || edgeTypes.isEmpty) {
-        return const <List<PathEdge>>[];
-      }
+      // `edgeTypes` may still be empty here, which means wildcard (match all types).
 
       final vlSpec = _extractVariableLengthSpec(edgePart);
       final newSequences = <List<PathEdge>>[];
@@ -1974,41 +2008,70 @@ class PatternQuery<N extends Node> {
       connectionIndex++;
 
       if (vlSpec == null) {
+        final edgeInfoMatch = RegExp(r'\[[^\]]*\]').firstMatch(edgePart);
+        final edgeInfo = edgeInfoMatch?.group(0) ?? '';
+        final constraintsForEdge = _edgeConstraintsFromInfo(edgeInfo);
+
         final fromId = isForward ? row[fromVar]! : row[toVar]!;
         final toId = isForward ? row[toVar]! : row[fromVar]!;
 
-        String? actualType;
-        for (final t in edgeTypes) {
-          if (graph.hasEdge(fromId, t, toId)) {
-            actualType = t;
-            break;
-          }
-        }
-        if (actualType == null) return const <List<PathEdge>>[];
-
-        final edgeProps = graph.edgeProperties(fromId, actualType, toId);
-
-        final hopEdge = isForward
-            ? PathEdge(
-                from: row[fromVar]!,
-                to: row[toVar]!,
-                type: actualType,
-                fromVariable: fromVar,
-                toVariable: toVar,
-                properties: edgeProps,
+        List<String> candidateTypes;
+        if (edgeTypes.isEmpty) {
+          candidateTypes = (graph.out[fromId]?.keys.toList() ?? <String>[])
+              .where((t) => graph.hasEdge(fromId, t, toId))
+              .where(
+                (t) => _edgeMatchesConstraints(
+                  fromId,
+                  toId,
+                  t,
+                  true,
+                  constraintsForEdge,
+                ),
               )
-            : PathEdge(
-                from: row[toVar]!,
-                to: row[fromVar]!,
-                type: actualType,
-                fromVariable: toVar,
-                toVariable: fromVar,
-                properties: edgeProps,
-              );
+              .toList()
+            ..sort();
+        } else {
+          candidateTypes = edgeTypes
+              .where((t) => graph.hasEdge(fromId, t, toId))
+              .where(
+                (t) => _edgeMatchesConstraints(
+                  fromId,
+                  toId,
+                  t,
+                  true,
+                  constraintsForEdge,
+                ),
+              )
+              .toList();
+        }
 
-        for (final seq in sequences) {
-          final next = List<PathEdge>.from(seq)..add(hopEdge);
-          newSequences.add(next);
+        if (candidateTypes.isEmpty) return const <List<PathEdge>>[];
+
+        for (final actualType in candidateTypes) {
+          final edgeProps = graph.edgeProperties(fromId, actualType, toId);
+
+          final hopEdge = isForward
+              ? PathEdge(
+                  from: row[fromVar]!,
+                  to: row[toVar]!,
+                  type: actualType,
+                  fromVariable: fromVar,
+                  toVariable: toVar,
+                  properties: edgeProps,
+                )
+              : PathEdge(
+                  from: row[toVar]!,
+                  to: row[fromVar]!,
+                  type: actualType,
+                  fromVariable: toVar,
+                  toVariable: fromVar,
+                  properties: edgeProps,
+                );
+
+          for (final seq in sequences) {
+            final next = List<PathEdge>.from(seq)..add(hopEdge);
+            newSequences.add(next);
+          }
         }
       } else {
         final traceId = row[metadataKey];
@@ -2080,7 +2143,17 @@ class PatternQuery<N extends Node> {
 
       if (depth == maxHops) return;
 
-      for (final type in edgeTypes) {
+      List<String> typesToExplore = edgeTypes;
+      if (edgeTypes.isEmpty) {
+        typesToExplore =
+            (isForward ? graph.out[currentId] : graph.inn[currentId])
+                ?.keys
+                .toList() ??
+            <String>[];
+        typesToExplore.sort();
+      }
+
+      for (final type in typesToExplore) {
         final neighbors = isForward
             ? graph.outNeighbors(currentId, type)
             : graph.inNeighbors(currentId, type);
@@ -2272,13 +2345,11 @@ class PatternQuery<N extends Node> {
     List<String>? startIds,
   }) {
     final out = <PathMatch>[];
-    final seen = <String>{};
+    final seen = <PathMatch>{};
     for (final pattern in patterns) {
       final paths = matchPaths(pattern, startId: startId, startIds: startIds);
       for (final path in paths) {
-        final keys = path.nodes.keys.toList()..sort();
-        final sig = keys.map((k) => '$k=${path.nodes[k]}').join('|');
-        if (seen.add(sig)) out.add(path);
+        if (seen.add(path)) out.add(path);
       }
     }
     return out;

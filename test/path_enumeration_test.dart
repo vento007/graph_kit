@@ -66,6 +66,24 @@ void main() {
       expect(result.paths.isEmpty, isTrue);
     });
 
+    test('allows paths exactly at hop limit', () {
+      // a -> b -> c -> d (3 hops)
+      graph.addNode(Node(id: 'a', type: 'Node', label: 'A'));
+      graph.addNode(Node(id: 'b', type: 'Node', label: 'B'));
+      graph.addNode(Node(id: 'c', type: 'Node', label: 'C'));
+      graph.addNode(Node(id: 'd', type: 'Node', label: 'D'));
+
+      graph.addEdge('a', 'CONNECTS', 'b');
+      graph.addEdge('b', 'CONNECTS', 'c');
+      graph.addEdge('c', 'CONNECTS', 'd');
+
+      final result = enumeratePaths(graph, 'a', 'd', maxHops: 3);
+
+      expect(result.hasPaths, isTrue);
+      expect(result.paths, contains(equals(['a', 'b', 'c', 'd'])));
+      expect(result.shortestPath, equals(['a', 'b', 'c', 'd']));
+    });
+
     test('prevents cycles', () {
       // a -> b -> c -> a (cycle)
       // a -> d (direct path)
