@@ -12,8 +12,57 @@ import 'pattern_query.dart';
 /// graph methods, helping prevent typos and providing better IDE support.
 extension GraphTyped<N extends Node> on Graph<N> {
   /// Adds a typed edge. See [Graph.addEdge].
-  void addEdgeT(String src, EdgeType edgeType, String dst) =>
-      addEdge(src, edgeType.value, dst);
+  void addEdgeT(
+    String src,
+    EdgeType edgeType,
+    String dst, {
+    Map<String, dynamic>? properties,
+  }) => addEdge(src, edgeType.value, dst, properties: properties);
+
+  /// Removes a typed edge. See [Graph.removeEdge].
+  bool removeEdgeT(String src, EdgeType edgeType, String dst) =>
+      removeEdge(src, edgeType.value, dst);
+
+  /// Moves a typed edge. See [Graph.moveEdge].
+  bool moveEdgeT({
+    required String oldSrc,
+    required EdgeType edgeType,
+    required String oldDst,
+    String? newSrc,
+    String? newDst,
+    Map<String, dynamic>? properties,
+  }) => moveEdge(
+    oldSrc: oldSrc,
+    edgeType: edgeType.value,
+    oldDst: oldDst,
+    newSrc: newSrc,
+    newDst: newDst,
+    properties: properties,
+  );
+
+  /// Replaces typed outgoing edges with one edge. See [Graph.setOutgoingEdge].
+  int setOutgoingEdgeT(
+    String src,
+    EdgeType edgeType,
+    String dst, {
+    Map<String, dynamic>? properties,
+  }) => setOutgoingEdge(src, edgeType.value, dst, properties: properties);
+
+  /// Replaces typed incoming edges with one edge. See [Graph.setIncomingEdge].
+  int setIncomingEdgeT(
+    String dst,
+    EdgeType edgeType,
+    String src, {
+    Map<String, dynamic>? properties,
+  }) => setIncomingEdge(dst, edgeType.value, src, properties: properties);
+
+  /// Removes typed outgoing edges. See [Graph.clearEdgesFrom].
+  int clearEdgesFromT(String src, {EdgeType? edgeType}) =>
+      clearEdgesFrom(src, edgeType: edgeType?.value);
+
+  /// Removes typed incoming edges. See [Graph.clearEdgesTo].
+  int clearEdgesToT(String dst, {EdgeType? edgeType}) =>
+      clearEdgesTo(dst, edgeType: edgeType?.value);
 
   /// Gets typed outbound neighbors. See [Graph.outNeighbors].
   Set<String> outNeighborsT(String src, EdgeType edgeType) =>

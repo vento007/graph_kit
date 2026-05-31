@@ -4,9 +4,9 @@
   <img src="https://raw.githubusercontent.com/vento007/graph_kit/main/media/graph_kit_logo.png" alt="Graph Kit Logo" width="420" />
 </p>
 
-<h1 align="center">graph kit — lightweight typed directed multigraph + pattern queries</h1>
+<h1 align="center">graph kit — lightweight labeled directed multigraph + pattern queries</h1>
 
-<p align="center"><em>In-memory, typed directed multigraph with powerful and performant Cypher-inspired pattern queries</em></p>
+<p align="center"><em>In-memory, labeled directed multigraph with powerful and performant Cypher-inspired pattern queries</em></p>
 
 <p align="center">
   <a href="https://pub.dev/packages/graph_kit">
@@ -36,12 +36,14 @@
 
 </div>
 
-In-memory, typed directed multigraph with:
+In-memory, labeled directed multigraph with:
 
-- **Typed nodes** (e.g., `Person`, `Team`, `Project`, `Resource`)
-- **Typed edges** (e.g., `WORKS_FOR`, `MANAGES`, `ASSIGNED_TO`, `DEPENDS_ON`)
+- **Labeled node types** (e.g., `Person`, `Team`, `Project`, `Resource`)
+- **Labeled relationship types** (e.g., `WORKS_FOR`, `MANAGES`, `ASSIGNED_TO`, `DEPENDS_ON`)
 - **Relationship properties** for weights, timestamps, metadata, and inline filtering
 - **Multiple relationships** between the same nodes
+- **Graph mutations** for removing, moving, replacing, and clearing graph data
+- **Read-only storage views** to prevent accidental graph index corruption
 - **Advanced Cypher queries** with WHERE clauses, RETURN projection, logical operators, variable-length paths, and edge variable comparison
 - **Ordering and Pagination** with ORDER BY, SKIP, and LIMIT
 - **Complete path results** with Neo4j-style edge information
@@ -55,6 +57,8 @@ In-memory, typed directed multigraph with:
   - [2.10 Relationship Properties](#210-relationship-properties)
   - [2.11 Utility Methods](#211-utility-methods)
   - [2.12 Summary of Query Methods](#212-summary-of-query-methods)
+  - [2.13 Mutation Methods](#213-mutation-methods)
+  - [2.14 Safe Read APIs](#214-safe-read-apis)
 - [3. Graph Algorithms](#3-graph-algorithms)
 - [4. Generic Traversal Utilities](#4-generic-traversal-utilities)
 - [5. Pattern Query Examples](#5-pattern-query-examples)
@@ -624,6 +628,71 @@ print(engineeringWorkers); // {alice, bob}
 | `findByLabelEquals()` | `Set<String>` | Nodes by exact label match |
 | `findByLabelContains()` | `Set<String>` | Nodes by label substring |
 | `outFrom()`/`inTo()` | `Set<String>` | Direct edge traversal |
+
+### 2.13 Mutation Methods
+
+GraphKit supports in-place graph mutation for app and game state:
+
+```dart
+// Move a person from one department to another
+graph.moveEdge(
+  oldSrc: 'alice',
+  edgeType: 'WORKS_FOR',
+  oldDst: 'engineering',
+  newDst: 'design',
+);
+
+// Reparent a game piece from one cell to another
+graph.moveEdge(
+  oldSrc: 'cell_1',
+  edgeType: 'CONTAINS',
+  oldDst: 'piece_7',
+  newSrc: 'cell_2',
+);
+
+// Update immutable node data while preserving connected edges
+graph.replaceNode(Node(
+  id: 'piece_7',
+  type: 'Piece',
+  label: 'Piece 7',
+  properties: {'mode': 'dragging'},
+));
+
+// Set exactly one relationship without looking up the old endpoint first
+graph.setOutgoingEdge('alice', 'WORKS_FOR', 'design');
+graph.setIncomingEdge('piece_7', 'CONTAINS', 'cell_2');
+
+// Remove graph data
+graph.removeEdge('cell_2', 'CONTAINS', 'piece_7');
+graph.removeNode('piece_7'); // also removes connected edges
+graph.clearEdgesFrom('cell_2', edgeType: 'CONTAINS');
+graph.clearEdgesTo('piece_7');
+graph.clear();
+```
+
+### 2.14 Safe Read APIs
+
+Graph storage views are read-only. Use graph methods to mutate nodes and edges:
+
+```dart
+final alice = graph.getNode('alice');
+final hasAlice = graph.containsNode('alice');
+final nodeCount = graph.nodeCount;
+final edgeCount = graph.edgeCount;
+
+for (final node in graph.nodes) {
+  print('${node.id}: ${node.label}');
+}
+
+for (final id in graph.nodeIds) {
+  print(id);
+}
+
+// These are safe for inspection but cannot be mutated directly.
+final byId = graph.nodesById;
+final outgoing = graph.out;
+final incoming = graph.inn;
+```
 
 ## 3. Graph Algorithms
 

@@ -1,3 +1,14 @@
+## 0.9.0
+
+- **Breaking safety change**: `nodesById`, `out`, and `inn` are now read-only views; mutate graphs through `addNode()`, `replaceNode()`, `removeNode()`, `addEdge()`, `removeEdge()`, `moveEdge()`, `setOutgoingEdge()`, `setIncomingEdge()`, `clearEdgesFrom()`, `clearEdgesTo()`, and `clear()`.
+- Added read helper APIs: `getNode()`, `containsNode()`, `nodes`, `nodeIds`, `nodeCount`, and `edgeCount`.
+- Excluded runtime log files from published package artifacts.
+
+## 0.8.7
+
+- Added graph mutation APIs: `removeEdge()`, `moveEdge()`, `setOutgoingEdge()`, `setIncomingEdge()`, `removeNode()`, `replaceNode()`, `clearEdgesFrom()`, `clearEdgesTo()`, and `clear()`.
+- Added typed extension helpers for edge removal, edge movement, edge clearing, and edge properties.
+
 ## 0.8.6
 
 - Fixed wildcard arrow-only patterns (`a->b`, `a<-b`) and wildcard edge expansion in `matchPaths()`.
